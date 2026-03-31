@@ -3,131 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iOS Pro Code Editor</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/theme/dracula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/xml/xml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/css/css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/javascript/javascript.min.js"></script>
+    <title>iOS Code Editor</title>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+    
     <style>
-        :root { --bg: #282a36; --header: #44475a; }
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; background: var(--bg); font-family: sans-serif; overflow: hidden; }
+        :root {
+            --bg: #282a36;
+            --header: #44475a;
+            --tab-active: #6272a4;
+            --accent: #50fa7b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         
-        /* Sidebar/Tab Manager */
-        .file-tabs { display: flex; overflow-x: auto; background: var(--header); padding: 5px 5px 0 5px; gap: 2px; }
-        .tab { padding: 8px 15px; background: #6272a4; color: white; border-radius: 5px 5px 0 0; cursor: pointer; white-space: nowrap; font-size: 13px; border: none; opacity: 0.7; }
-        .tab.active { opacity: 1; background: var(--bg); font-weight: bold; }
-        .add-file { padding: 8px 15px; background: #50fa7b; color: black; border-radius: 5px; border: none; font-weight: bold; margin-left: 5px; margin-bottom: 5px; }
-
-        /* Editor Area */
-        .main-container { flex: 1; display: flex; flex-direction: column; }
-        .CodeMirror { flex: 1; height: auto; font-size: 16px; } /* 16px để tránh zoom iOS */
+        /* Khóa cứng layout vừa màn hình */
+        body, html {
+            width: 100%; height: 100%;
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg); color: white;
+            display: flex; flex-direction: column;
+        }
         
-        /* Preview */
-        #preview { height: 40%; background: white; border: none; border-top: 4px solid var(--header); }
+        /* Header & Thanh Tabs */
+        .header {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--header); padding: 5px; border-bottom: 1px solid #1e1f29;
+        }
+        .tab-container {
+            display: flex; overflow-x: auto; flex: 1;
+            -webkit-overflow-scrolling: touch; /* Vuốt mượt trên iOS */
+        }
+        .tab-container::-webkit-scrollbar { display: none; }
+        .tab {
+            padding: 10px 15px; margin-right: 5px; background: transparent;
+            border: none; color: #ccc; font-size: 14px; border-radius: 5px;
+            white-space: nowrap; cursor: pointer; transition: 0.2s;
+        }
+        .tab.active { background: var(--tab-active); color: white; font-weight: bold; }
         
-        .controls { padding: 10px; background: var(--header); display: flex; justify-content: flex-end; }
-        .run-btn { background: #ff79c6; border: none; padding: 10px 25px; color: white; border-radius: 5px; font-weight: bold; }
+        .btn-run {
+            background: var(--accent); color: #282a36; border: none;
+            padding: 10px 20px; border-radius: 5px; font-weight: bold; margin-left: 10px;
+        }
+        
+        /* Khu vực Code */
+        .editor-wrapper { 
+            flex: 1; /* Chia 50% màn hình cho code */
+            position: relative; 
+            display: flex; flex-direction: column; 
+        }
+        
+        /* Ép CodeMirror nằm gọn, chống tràn viền */
+        .CodeMirror {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            height: 100% !important; width: 100% !important;
+            font-size: 16px; /* QUAN TRỌNG: Ngăn Safari tự động Zoom */
+        }
+        
+        /* Thanh ngăn cách */
+        .divider { height: 3px; background: #ff79c6; }
+        
+        /* Khu vực Preview */
+        #preview-container { 
+            flex: 1; /* Chia 50% màn hình cho kết quả */
+            background: white; display: flex; flex-direction: column; 
+        }
+        iframe { width: 100%; height: 100%; border: none; flex: 1; }
     </style>
 </head>
 <body>
 
-<div class="file-tabs" id="tab-container">
-    <button class="add-file" onclick="addNewFile()">+ New File</button>
-</div>
-
-<div class="main-container">
-    <div id="editor-wrapper"></div>
-    <div class="controls">
-        <button class="run-btn" onclick="runProject()">RUN PROJECT</button>
+    <div class="header">
+        <div class="tab-container" id="tabs">
+            </div>
+        <button class="btn-run" onclick="runCode()">RUN</button>
     </div>
-    <iframe id="preview"></iframe>
-</div>
+    
+    <div class="editor-wrapper">
+        <textarea id="code-editor"></textarea>
+    </div>
+    
+    <div class="divider"></div>
+    
+    <div id="preview-container">
+        <iframe id="preview"></iframe>
+    </div>
 
-<script>
-    let files = {
-        "index.html": { content: "<h1>Hello iOS!</h1>", mode: "xml" },
-        "style.css": { content: "h1 { color: pink; }", mode: "css" },
-        "script.js": { content: "console.log('Running...');", mode: "javascript" }
-    };
-    let activeFile = "index.html";
-    let editor;
+    <script>
+        // Hệ thống quản lý File (Mặc định 3 file)
+        let files = {
+            'index.html': { mode: 'htmlmixed', content: '<h1>Xin chào iOS Editor!</h1>\n<p>Code đã được fix lỗi tràn viền và tự động zoom.</p>' },
+            'style.css': { mode: 'css', content: 'body {\n  font-family: sans-serif;\n  text-align: center;\n  padding-top: 50px;\n  background-color: #f4f4f9;\n}\n\nh1 {\n  color: #ff79c6;\n}' },
+            'script.js': { mode: 'javascript', content: 'console.log("Hệ thống đã sẵn sàng!");' }
+        };
+        let currentFile = 'index.html';
 
-    // Khởi tạo Editor
-    function initEditor() {
-        editor = CodeMirror(document.getElementById("editor-wrapper"), {
-            lineNumbers: true,
+        // 1. Khởi tạo CodeMirror
+        let editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
             theme: "dracula",
-            mode: files[activeFile].mode,
-            value: files[activeFile].content,
+            lineNumbers: true,
+            lineWrapping: true, // QUAN TRỌNG: Tự động xuống dòng, sửa lỗi tràn viền ảnh của bạn
             viewportMargin: Infinity,
-            tabSize: 2
+            indentUnit: 4,
+            tabSize: 4
         });
 
-        editor.on("change", (cm) => {
-            files[activeFile].content = cm.getValue();
-            localStorage.setItem('project_files', JSON.stringify(files));
-        });
-    }
-
-    function renderTabs() {
-        const container = document.getElementById("tab-container");
-        container.querySelectorAll('.tab').forEach(t => t.remove());
-        
-        Object.keys(files).forEach(fileName => {
-            const btn = document.createElement("button");
-            btn.className = `tab ${fileName === activeFile ? 'active' : ''}`;
-            btn.innerText = fileName;
-            btn.onclick = () => switchFile(fileName);
-            container.insertBefore(btn, container.firstChild);
-        });
-    }
-
-    function switchFile(name) {
-        activeFile = name;
-        editor.setOption("mode", files[name].mode);
-        editor.setValue(files[name].content);
-        renderTabs();
-    }
-
-    function addNewFile() {
-        const name = prompt("Nhập tên file (vd: about.html, theme.css):");
-        if (!name) return;
-        
-        let mode = "xml";
-        if (name.endsWith(".css")) mode = "css";
-        if (name.endsWith(".js")) mode = "javascript";
-        
-        files[name] = { content: "", mode: mode };
-        switchFile(name);
-    }
-
-    function runProject() {
-        const preview = document.getElementById('preview').contentWindow.document;
-        let html = files["index.html"] ? files["index.html"].content : "";
-        
-        // Tự động tìm các file CSS và JS để nhúng vào index.html
-        let css = "";
-        let js = "";
-        Object.keys(files).forEach(name => {
-            if (name.endsWith(".css")) css += `<style>${files[name].content}</style>`;
-            if (name.endsWith(".js")) js += `<script>${files[name].content}<\/script>`;
+        // 2. Lắng nghe thay đổi code
+        editor.on("change", () => {
+            files[currentFile].content = editor.getValue();
         });
 
-        preview.open();
-        preview.write(html + css + js);
-        preview.close();
-    }
+        // 3. Render hệ thống Tabs (Bao gồm nút + New File)
+        function renderTabs() {
+            const tabContainer = document.getElementById('tabs');
+            tabContainer.innerHTML = '';
+            
+            // Render danh sách file
+            for (let fileName in files) {
+                let btn = document.createElement('button');
+                btn.className = `tab ${fileName === currentFile ? 'active' : ''}`;
+                btn.innerText = fileName;
+                btn.onclick = () => switchTab(fileName);
+                tabContainer.appendChild(btn);
+            }
+            
+            // Giữ lại nút + New File của bạn
+            let newFileBtn = document.createElement('button');
+            newFileBtn.className = 'tab';
+            newFileBtn.style.color = '#50fa7b'; // Đổi màu xanh cho nổi bật
+            newFileBtn.innerText = '+ New File';
+            newFileBtn.onclick = addNewFile;
+            tabContainer.appendChild(newFileBtn);
+        }
 
-    // Tải dữ liệu cũ nếu có
-    const saved = localStorage.getItem('project_files');
-    if (saved) files = JSON.parse(saved);
+        // 4. Chuyển đổi giữa các File
+        function switchTab(fileName) {
+            currentFile = fileName;
+            editor.setOption("mode", files[fileName].mode);
+            editor.setValue(files[fileName].content);
+            renderTabs();
+            
+            // Cập nhật lại UI của CodeMirror
+            setTimeout(() => editor.refresh(), 10);
+        }
 
-    initEditor();
-    renderTabs();
-</script>
+        // 5. Thêm File mới
+        function addNewFile() {
+            let name = prompt("Nhập tên file kèm đuôi (VD: main.css, app.js):");
+            if (!name || files[name]) return;
+            
+            let mode = 'javascript'; // Mặc định
+            if (name.endsWith('.html')) mode = 'htmlmixed';
+            else if (name.endsWith('.css')) mode = 'css';
+            
+            files[name] = { mode: mode, content: '' };
+            switchTab(name);
+        }
 
+        // 6. Trình biên dịch: Gộp HTML, CSS, JS vào iframe
+        function runCode() {
+            let html = files['index.html'] ? files['index.html'].content : '';
+            let css = '';
+            let js = '';
+
+            // Tự động tìm và gộp tất cả các file css, js có trong hệ thống
+            for (let fileName in files) {
+                if (fileName.endsWith('.css')) {
+                    css += `<style>${files[fileName].content}</style>\n`;
+                }
+                if (fileName.endsWith('.js')) {
+                    js += `<script>${files[fileName].content}<\/script>\n`;
+                }
+            }
+
+            let previewFrame = document.getElementById('preview');
+            let preview = previewFrame.contentWindow.document;
+            
+            preview.open();
+            preview.write(html + css + js);
+            preview.close();
+        }
+
+        // Chạy lần đầu tiên khi mở trang
+        switchTab('index.html');
+        runCode();
+    </script>
 </body>
 </html>
