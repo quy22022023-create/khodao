@@ -2,7 +2,13 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="iOS Editor">
+    <meta name="theme-color" content="#282a36">
+    
     <title>iOS Code Editor Pro</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
@@ -23,7 +29,12 @@
             --action: #8be9fd;
             --text-light: #f8f8f2;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            -webkit-tap-highlight-color: transparent;
+        }
         
         body, html {
             width: 100%; height: 100%;
@@ -36,11 +47,12 @@
         /* Header Toolbar */
         .header {
             display: flex; align-items: center; justify-content: space-between;
-            background: var(--header); padding: 8px 10px; border-bottom: 1px solid #1e1f29;
-            flex-wrap: wrap; gap: 8px; /* Cho phép rớt dòng nếu màn hình quá nhỏ */
+            background: var(--header); 
+            padding: max(8px, env(safe-area-inset-top)) 10px 8px 10px; 
+            border-bottom: 1px solid #1e1f29;
+            flex-wrap: wrap; gap: 8px; 
         }
 
-        /* Dropdown chọn file */
         .file-selector-wrapper {
             flex: 1;
             min-width: 120px;
@@ -58,25 +70,33 @@
             content: '▼'; position: absolute; right: 10px; font-size: 10px; color: #ccc; pointer-events: none;
         }
 
-        /* Nhóm nút công cụ */
-        .tools { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+        .tools { 
+            display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; 
+            overflow-x: auto; padding-bottom: 2px;
+            -webkit-overflow-scrolling: touch;
+        }
         .tools::-webkit-scrollbar { display: none; }
         
         .btn { 
             border: none; padding: 8px 12px; border-radius: 6px; 
             font-weight: bold; font-size: 13px; cursor: pointer;
             white-space: nowrap; display: flex; align-items: center; justify-content: center;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .btn-action { background: #6272a4; color: white; padding: 8px 10px; }
         .btn-add { background: transparent; color: var(--accent); border: 1px dashed var(--accent); padding: 7px 10px; }
         .btn-del { background: transparent; color: var(--danger); border: 1px dashed var(--danger); padding: 7px 10px; }
         .btn-clear { background: var(--warning); color: #282a36; }
         .btn-run { background: var(--accent); color: #282a36; font-size: 14px; padding: 8px 16px; }
+        
+        /* Nút mới: Xoá tất cả dữ liệu */
+        .btn-reset { background: #ff4444; color: white; border: 1px solid #ff4444; }
 
-        /* Khu vực Code */
         .editor-wrapper { 
             flex: 1; position: relative; 
             display: flex; flex-direction: column; 
+            padding-bottom: env(safe-area-inset-bottom); 
         }
         .CodeMirror {
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -84,7 +104,6 @@
             font-size: 16px; 
         }
         
-        /* Cửa sổ Preview Toàn Màn Hình */
         #preview-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: white; z-index: 9999;
@@ -98,9 +117,9 @@
         
         .preview-header {
             display: flex; justify-content: space-between; align-items: center;
-            background: #f8f8f8; padding: 12px 15px;
+            background: #f8f8f8; 
+            padding: max(12px, env(safe-area-inset-top)) 15px 12px 15px;
             border-bottom: 1px solid #ddd;
-            padding-top: env(safe-area-inset-top, 15px); 
         }
         .preview-title { color: #333; font-weight: bold; font-size: 16px; }
         .btn-close-preview {
@@ -108,7 +127,7 @@
             padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 14px;
         }
         
-        iframe { width: 100%; height: 100%; border: none; flex: 1; background: white; }
+        iframe { width: 100%; height: 100%; border: none; flex: 1; background: white; padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
 <body>
@@ -121,6 +140,7 @@
         </div>
         
         <div class="tools">
+            <button class="btn btn-reset" onclick="resetAllData()" title="Xoá tất cả dữ liệu & Reset app">🗑️ Tất cả</button>
             <button class="btn btn-action" onclick="document.getElementById('file-input').click()" title="Nhập file">📥</button>
             <button class="btn btn-action" onclick="exportCurrentFile()" title="Xuất file">📤</button>
             <button class="btn btn-del" onclick="deleteCurrentFile()" title="Xoá file hiện tại">✕</button>
@@ -143,12 +163,14 @@
     </div>
 
     <script>
-        // Khởi tạo dữ liệu
-        let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || {
-            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px; font-family: sans-serif;">Xin chào!</h1>\n<p style="text-align:center; font-family: sans-serif;">Đã bổ sung tính năng Nhập và Xuất file.</p>' },
+        // Khởi tạo dữ liệu mặc định
+        const defaultFiles = {
+            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px; font-family: sans-serif;">Xin chào!</h1>\n<p style="text-align:center; font-family: sans-serif;">Dữ liệu đã được làm sạch hoàn toàn.</p>' },
             'style.css': { mode: 'css', content: 'body { background: #f0f0f0; color: #333; }' },
-            'script.js': { mode: 'javascript', content: 'console.log("App đã khởi chạy!");' }
+            'script.js': { mode: 'javascript', content: 'console.log("App đã reset thành công!");' }
         };
+
+        let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || defaultFiles;
         let currentFile = Object.keys(files)[0] || 'index.html';
 
         // Cấu hình CodeMirror
@@ -160,7 +182,6 @@
             tabSize: 4
         });
 
-        // Lắng nghe sự kiện gõ phím để lưu code
         editor.on("change", () => {
             if (files[currentFile]) {
                 files[currentFile].content = editor.getValue();
@@ -168,57 +189,43 @@
             }
         });
 
-        // Render danh sách file vào thẻ <select>
         function renderDropdown() {
             const selector = document.getElementById('file-selector');
             selector.innerHTML = ''; 
-            
             for (let fileName in files) {
                 const option = document.createElement('option');
                 option.value = fileName;
                 option.innerText = fileName;
-                if (fileName === currentFile) {
-                    option.selected = true;
-                }
+                if (fileName === currentFile) option.selected = true;
                 selector.appendChild(option);
             }
         }
 
-        // Khi người dùng chọn file khác trong menu
         function onFileSelectChange() {
             const selector = document.getElementById('file-selector');
             switchFile(selector.value);
         }
 
-        // Chuyển đổi nội dung file trong Editor
         function switchFile(fileName) {
             currentFile = fileName;
             editor.setOption("mode", files[fileName].mode);
             editor.setValue(files[fileName].content);
             renderDropdown();
-            
             setTimeout(() => editor.refresh(), 50);
         }
 
         function addNewFile() {
             let name = prompt("Tên file mới (VD: app.js, style.css):");
             if (!name) return;
-            
-            // Nếu người dùng nhập trùng tên file đã có, tự động thêm số vào sau
             if (files[name]) {
                 let counter = 1;
                 let newName = `${name}_${counter}`;
-                while(files[newName]) {
-                    counter++;
-                    newName = `${name}_${counter}`;
-                }
+                while(files[newName]) { counter++; newName = `${name}_${counter}`; }
                 name = newName;
             }
-            
             let mode = 'javascript';
             if (name.endsWith('.html')) mode = 'htmlmixed';
             else if (name.endsWith('.css')) mode = 'css';
-            
             files[name] = { mode: mode, content: '' };
             switchFile(name);
         }
@@ -244,59 +251,47 @@
             }
         }
 
-        // --- CÁC HÀM XỬ LÝ NHẬP VÀ XUẤT FILE ---
+        // --- HÀM RESET TOÀN BỘ DỮ LIỆU ---
+        function resetAllData() {
+            const warning = "CẢNH BÁO: Hành động này sẽ xoá sạch TẤT CẢ các file hiện tại và đưa ứng dụng về trạng thái mặc định. Bạn có chắc chắn muốn tiếp tục không?";
+            if (confirm(warning)) {
+                localStorage.removeItem('ios_editor_pro_files');
+                location.reload(); // Tải lại trang để áp dụng cấu hình gốc
+            }
+        }
 
         function importFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
                 let fileName = file.name;
-                
-                // Tránh ghi đè file hiện có
-                if (files[fileName]) {
-                    fileName = "imported_" + fileName;
-                }
-
+                if (files[fileName]) fileName = "imported_" + fileName;
                 let mode = 'javascript';
                 if (fileName.endsWith('.html')) mode = 'htmlmixed';
                 else if (fileName.endsWith('.css')) mode = 'css';
-
                 files[fileName] = { mode: mode, content: content };
-                
-                // Reset lại thẻ input để có thể import file cùng tên lần sau
                 event.target.value = '';
-                
                 switchFile(fileName);
                 alert(`Đã nhập thành công file: ${fileName}`);
-            };
-            reader.onerror = function() {
-                alert("Đã xảy ra lỗi khi đọc file.");
             };
             reader.readAsText(file);
         }
 
         function exportCurrentFile() {
             if (!files[currentFile]) return;
-            
             const content = files[currentFile].content;
             const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
-            
             const a = document.createElement('a');
             a.href = url;
             a.download = currentFile;
-            
-            // Thêm thẻ a vào DOM, click để tải, sau đó dọn dẹp
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
-
-        // --- CÁC HÀM XỬ LÝ PREVIEW TOÀN MÀN HÌNH ---
 
         function closePreview() {
             const overlay = document.getElementById('preview-overlay');
@@ -307,22 +302,18 @@
         function runCode() {
             const overlay = document.getElementById('preview-overlay');
             overlay.classList.add('active');
-            
             let html = files['index.html'] ? files['index.html'].content : '';
             let css = '', js = '';
-
             for (let f in files) {
                 if (f.endsWith('.css')) css += `<style>${files[f].content}</style>`;
                 if (f.endsWith('.js')) js += `<script>${files[f].content}<\/script>`;
             }
-
             const preview = document.getElementById('preview').contentWindow.document;
             preview.open();
             preview.write(html + css + js);
             preview.close();
         }
 
-        // Khởi động file mặc định khi load xong trang
         switchFile(currentFile);
     </script>
 </body>
