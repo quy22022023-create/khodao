@@ -20,6 +20,7 @@
             --accent: #50fa7b;
             --danger: #ff5555;
             --warning: #ffb86c;
+            --action: #8be9fd;
             --text-light: #f8f8f2;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,12 +37,13 @@
         .header {
             display: flex; align-items: center; justify-content: space-between;
             background: var(--header); padding: 8px 10px; border-bottom: 1px solid #1e1f29;
-            flex-wrap: nowrap; gap: 8px;
+            flex-wrap: wrap; gap: 8px; /* Cho phép rớt dòng nếu màn hình quá nhỏ */
         }
 
-        /* Dropdown chọn file (Kích hoạt vòng xoay iOS) */
+        /* Dropdown chọn file */
         .file-selector-wrapper {
             flex: 1;
+            min-width: 120px;
             position: relative;
             display: flex;
             align-items: center;
@@ -52,18 +54,20 @@
             font-size: 15px; font-weight: bold; appearance: none;
             -webkit-appearance: none; outline: none;
         }
-        /* Mũi tên giả cho thẻ select */
         .file-selector-wrapper::after {
             content: '▼'; position: absolute; right: 10px; font-size: 10px; color: #ccc; pointer-events: none;
         }
 
         /* Nhóm nút công cụ */
-        .tools { display: flex; gap: 6px; align-items: center; }
+        .tools { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+        .tools::-webkit-scrollbar { display: none; }
+        
         .btn { 
             border: none; padding: 8px 12px; border-radius: 6px; 
             font-weight: bold; font-size: 13px; cursor: pointer;
             white-space: nowrap; display: flex; align-items: center; justify-content: center;
         }
+        .btn-action { background: #6272a4; color: white; padding: 8px 10px; }
         .btn-add { background: transparent; color: var(--accent); border: 1px dashed var(--accent); padding: 7px 10px; }
         .btn-del { background: transparent; color: var(--danger); border: 1px dashed var(--danger); padding: 7px 10px; }
         .btn-clear { background: var(--warning); color: #282a36; }
@@ -77,27 +81,26 @@
         .CodeMirror {
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             height: 100% !important; width: 100% !important;
-            font-size: 16px; /* Chặn auto-zoom trên iOS */
+            font-size: 16px; 
         }
         
-        /* Cửa sổ Preview Toàn Màn Hình (Như mở App mới) */
+        /* Cửa sổ Preview Toàn Màn Hình */
         #preview-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: white; z-index: 9999;
             display: flex; flex-direction: column;
-            transform: translateY(100%); /* Trạng thái ẩn ban đầu: nằm dưới màn hình */
+            transform: translateY(100%); 
             transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
         #preview-overlay.active {
-            transform: translateY(0); /* Trượt lên khi kích hoạt */
+            transform: translateY(0); 
         }
         
-        /* Thanh điều hướng của cửa sổ Preview */
         .preview-header {
             display: flex; justify-content: space-between; align-items: center;
             background: #f8f8f8; padding: 12px 15px;
             border-bottom: 1px solid #ddd;
-            padding-top: env(safe-area-inset-top, 15px); /* Tránh tai thỏ/Dynamic Island của iPhone */
+            padding-top: env(safe-area-inset-top, 15px); 
         }
         .preview-title { color: #333; font-weight: bold; font-size: 16px; }
         .btn-close-preview {
@@ -110,12 +113,16 @@
 </head>
 <body>
 
+    <input type="file" id="file-input" style="display: none;" onchange="importFile(event)">
+
     <div class="header">
         <div class="file-selector-wrapper">
             <select id="file-selector" onchange="onFileSelectChange()"></select>
         </div>
         
         <div class="tools">
+            <button class="btn btn-action" onclick="document.getElementById('file-input').click()" title="Nhập file">📥</button>
+            <button class="btn btn-action" onclick="exportCurrentFile()" title="Xuất file">📤</button>
             <button class="btn btn-del" onclick="deleteCurrentFile()" title="Xoá file hiện tại">✕</button>
             <button class="btn btn-add" onclick="addNewFile()">+ File</button>
             <button class="btn btn-clear" onclick="clearCurrentCode()">Xoá Code</button>
@@ -138,7 +145,7 @@
     <script>
         // Khởi tạo dữ liệu
         let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || {
-            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px; font-family: sans-serif;">Xin chào!</h1>\n<p style="text-align:center; font-family: sans-serif;">Giao diện ứng dụng hoàn toàn mới.</p>' },
+            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px; font-family: sans-serif;">Xin chào!</h1>\n<p style="text-align:center; font-family: sans-serif;">Đã bổ sung tính năng Nhập và Xuất file.</p>' },
             'style.css': { mode: 'css', content: 'body { background: #f0f0f0; color: #333; }' },
             'script.js': { mode: 'javascript', content: 'console.log("App đã khởi chạy!");' }
         };
@@ -164,7 +171,7 @@
         // Render danh sách file vào thẻ <select>
         function renderDropdown() {
             const selector = document.getElementById('file-selector');
-            selector.innerHTML = ''; // Xoá danh sách cũ
+            selector.innerHTML = ''; 
             
             for (let fileName in files) {
                 const option = document.createElement('option');
@@ -177,7 +184,7 @@
             }
         }
 
-        // Khi người dùng chọn file khác trong menu thả xuống
+        // Khi người dùng chọn file khác trong menu
         function onFileSelectChange() {
             const selector = document.getElementById('file-selector');
             switchFile(selector.value);
@@ -190,13 +197,23 @@
             editor.setValue(files[fileName].content);
             renderDropdown();
             
-            // Xử lý đồ họa để CodeMirror cập nhật kịp trên điện thoại
             setTimeout(() => editor.refresh(), 50);
         }
 
         function addNewFile() {
             let name = prompt("Tên file mới (VD: app.js, style.css):");
-            if (!name || files[name]) return;
+            if (!name) return;
+            
+            // Nếu người dùng nhập trùng tên file đã có, tự động thêm số vào sau
+            if (files[name]) {
+                let counter = 1;
+                let newName = `${name}_${counter}`;
+                while(files[newName]) {
+                    counter++;
+                    newName = `${name}_${counter}`;
+                }
+                name = newName;
+            }
             
             let mode = 'javascript';
             if (name.endsWith('.html')) mode = 'htmlmixed';
@@ -213,7 +230,7 @@
             }
             if (confirm(`Bạn có chắc chắn muốn xoá file [${currentFile}] không?`)) {
                 delete files[currentFile];
-                currentFile = Object.keys(files)[0]; // Trở về file đầu tiên
+                currentFile = Object.keys(files)[0]; 
                 renderDropdown();
                 switchFile(currentFile);
             }
@@ -227,24 +244,73 @@
             }
         }
 
+        // --- CÁC HÀM XỬ LÝ NHẬP VÀ XUẤT FILE ---
+
+        function importFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                let fileName = file.name;
+                
+                // Tránh ghi đè file hiện có
+                if (files[fileName]) {
+                    fileName = "imported_" + fileName;
+                }
+
+                let mode = 'javascript';
+                if (fileName.endsWith('.html')) mode = 'htmlmixed';
+                else if (fileName.endsWith('.css')) mode = 'css';
+
+                files[fileName] = { mode: mode, content: content };
+                
+                // Reset lại thẻ input để có thể import file cùng tên lần sau
+                event.target.value = '';
+                
+                switchFile(fileName);
+                alert(`Đã nhập thành công file: ${fileName}`);
+            };
+            reader.onerror = function() {
+                alert("Đã xảy ra lỗi khi đọc file.");
+            };
+            reader.readAsText(file);
+        }
+
+        function exportCurrentFile() {
+            if (!files[currentFile]) return;
+            
+            const content = files[currentFile].content;
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFile;
+            
+            // Thêm thẻ a vào DOM, click để tải, sau đó dọn dẹp
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
         // --- CÁC HÀM XỬ LÝ PREVIEW TOÀN MÀN HÌNH ---
 
         function closePreview() {
             const overlay = document.getElementById('preview-overlay');
             overlay.classList.remove('active');
-            // Cập nhật lại editor khi quay về
             setTimeout(() => editor.refresh(), 300);
         }
 
         function runCode() {
-            // Hiệu ứng trượt cửa sổ kết quả lên
             const overlay = document.getElementById('preview-overlay');
             overlay.classList.add('active');
             
             let html = files['index.html'] ? files['index.html'].content : '';
             let css = '', js = '';
 
-            // Nối tất cả CSS và JS
             for (let f in files) {
                 if (f.endsWith('.css')) css += `<style>${files[f].content}</style>`;
                 if (f.endsWith('.js')) js += `<script>${files[f].content}<\/script>`;
