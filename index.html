@@ -17,89 +17,109 @@
         :root {
             --bg: #282a36;
             --header: #44475a;
-            --tab-active: #6272a4;
             --accent: #50fa7b;
             --danger: #ff5555;
             --warning: #ffb86c;
+            --text-light: #f8f8f2;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body, html {
             width: 100%; height: 100%;
             overflow: hidden; 
-            font-family: -apple-system, sans-serif;
-            background: var(--bg); color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg); color: var(--text-light);
             display: flex; flex-direction: column;
         }
         
-        /* Header & Thanh Tabs */
+        /* Header Toolbar */
         .header {
-            display: flex; align-items: center; 
-            background: var(--header); padding: 5px; border-bottom: 1px solid #1e1f29;
-            flex-wrap: nowrap;
-        }
-        .tab-container {
-            display: flex; overflow-x: auto; flex: 1;
-            -webkit-overflow-scrolling: touch;
-        }
-        .tab-container::-webkit-scrollbar { display: none; }
-        
-        .tab-group { display: flex; align-items: center; background: #383a59; margin-right: 5px; border-radius: 5px; overflow: hidden; }
-        .tab {
-            padding: 10px 12px; background: transparent;
-            border: none; color: #ccc; font-size: 13px;
-            white-space: nowrap; cursor: pointer;
-        }
-        .tab.active { background: var(--tab-active); color: white; font-weight: bold; }
-        
-        .btn-del-file {
-            background: transparent; color: #ff5555; border: none;
-            padding: 10px 8px; font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--header); padding: 8px 10px; border-bottom: 1px solid #1e1f29;
+            flex-wrap: nowrap; gap: 8px;
         }
 
-        .controls { display: flex; gap: 5px; margin-left: 5px; }
-        .btn { border: none; padding: 8px 12px; border-radius: 5px; font-weight: bold; font-size: 12px; }
-        .btn-run { background: var(--accent); color: #282a36; }
-        .btn-view { background: #bd93f9; color: white; }
+        /* Dropdown chọn file (Kích hoạt vòng xoay iOS) */
+        .file-selector-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        select#file-selector {
+            width: 100%; padding: 8px 10px; border-radius: 6px;
+            background: #383a59; color: white; border: 1px solid #6272a4;
+            font-size: 15px; font-weight: bold; appearance: none;
+            -webkit-appearance: none; outline: none;
+        }
+        /* Mũi tên giả cho thẻ select */
+        .file-selector-wrapper::after {
+            content: '▼'; position: absolute; right: 10px; font-size: 10px; color: #ccc; pointer-events: none;
+        }
+
+        /* Nhóm nút công cụ */
+        .tools { display: flex; gap: 6px; align-items: center; }
+        .btn { 
+            border: none; padding: 8px 12px; border-radius: 6px; 
+            font-weight: bold; font-size: 13px; cursor: pointer;
+            white-space: nowrap; display: flex; align-items: center; justify-content: center;
+        }
+        .btn-add { background: transparent; color: var(--accent); border: 1px dashed var(--accent); padding: 7px 10px; }
+        .btn-del { background: transparent; color: var(--danger); border: 1px dashed var(--danger); padding: 7px 10px; }
         .btn-clear { background: var(--warning); color: #282a36; }
-        .btn-add { background: transparent; color: var(--accent); border: 1px dashed var(--accent); }
+        .btn-run { background: var(--accent); color: #282a36; font-size: 14px; padding: 8px 16px; }
 
-        /* Khu vực Code - Mặc định chiếm 100% khi chưa bật View */
+        /* Khu vực Code */
         .editor-wrapper { 
             flex: 1; position: relative; 
             display: flex; flex-direction: column; 
-            transition: all 0.3s ease;
         }
-        
         .CodeMirror {
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             height: 100% !important; width: 100% !important;
             font-size: 16px; /* Chặn auto-zoom trên iOS */
         }
         
-        /* Khu vực Preview - Có thể ẩn/hiện */
-        #preview-container { 
-            height: 0; /* Mặc định ẩn đi để hiện editor tràn viền */
-            background: white; border-top: 3px solid #ff79c6;
-            transition: height 0.3s ease;
-            overflow: hidden;
+        /* Cửa sổ Preview Toàn Màn Hình (Như mở App mới) */
+        #preview-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: white; z-index: 9999;
             display: flex; flex-direction: column;
+            transform: translateY(100%); /* Trạng thái ẩn ban đầu: nằm dưới màn hình */
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
-        #preview-container.show { height: 40%; } /* Khi bật sẽ chiếm 40% màn hình */
-        iframe { width: 100%; height: 100%; border: none; }
+        #preview-overlay.active {
+            transform: translateY(0); /* Trượt lên khi kích hoạt */
+        }
+        
+        /* Thanh điều hướng của cửa sổ Preview */
+        .preview-header {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #f8f8f8; padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+            padding-top: env(safe-area-inset-top, 15px); /* Tránh tai thỏ/Dynamic Island của iPhone */
+        }
+        .preview-title { color: #333; font-weight: bold; font-size: 16px; }
+        .btn-close-preview {
+            background: #007aff; color: white; border: none;
+            padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 14px;
+        }
+        
+        iframe { width: 100%; height: 100%; border: none; flex: 1; background: white; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="tab-container" id="tabs">
-            </div>
-        <button class="btn btn-add" onclick="addNewFile()">+ File</button>
+        <div class="file-selector-wrapper">
+            <select id="file-selector" onchange="onFileSelectChange()"></select>
+        </div>
         
-        <div class="controls">
-            <button class="btn btn-clear" onclick="clearCurrentCode()">CLEAR</button>
-            <button class="btn btn-view" id="view-toggle" onclick="togglePreview()">VIEW</button>
-            <button class="btn btn-run" onclick="runCode()">RUN</button>
+        <div class="tools">
+            <button class="btn btn-del" onclick="deleteCurrentFile()" title="Xoá file hiện tại">✕</button>
+            <button class="btn btn-add" onclick="addNewFile()">+ File</button>
+            <button class="btn btn-clear" onclick="clearCurrentCode()">Xoá Code</button>
+            <button class="btn btn-run" onclick="runCode()">RUN 🚀</button>
         </div>
     </div>
     
@@ -107,18 +127,24 @@
         <textarea id="code-editor"></textarea>
     </div>
     
-    <div id="preview-container">
+    <div id="preview-overlay">
+        <div class="preview-header">
+            <div class="preview-title">Kết quả hiển thị</div>
+            <button class="btn-close-preview" onclick="closePreview()">Xong</button>
+        </div>
         <iframe id="preview"></iframe>
     </div>
 
     <script>
-        // Khởi tạo dữ liệu mẫu
-        let files = JSON.parse(localStorage.getItem('ios_editor_files')) || {
-            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px">Trình biên tập Tràn Viền</h1>\n<p style="text-align:center">Nhấn RUN để xem kết quả, VIEW để ẩn/hiện màn hình này.</p>' },
-            'style.css': { mode: 'css', content: 'body { background: #f0f0f0; color: #333; }' }
+        // Khởi tạo dữ liệu
+        let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || {
+            'index.html': { mode: 'htmlmixed', content: '<h1 style="text-align:center; padding-top:20px; font-family: sans-serif;">Xin chào!</h1>\n<p style="text-align:center; font-family: sans-serif;">Giao diện ứng dụng hoàn toàn mới.</p>' },
+            'style.css': { mode: 'css', content: 'body { background: #f0f0f0; color: #333; }' },
+            'script.js': { mode: 'javascript', content: 'console.log("App đã khởi chạy!");' }
         };
         let currentFile = Object.keys(files)[0] || 'index.html';
 
+        // Cấu hình CodeMirror
         const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
             theme: "dracula",
             lineNumbers: true,
@@ -127,89 +153,98 @@
             tabSize: 4
         });
 
+        // Lắng nghe sự kiện gõ phím để lưu code
         editor.on("change", () => {
             if (files[currentFile]) {
                 files[currentFile].content = editor.getValue();
-                localStorage.setItem('ios_editor_files', JSON.stringify(files));
+                localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
             }
         });
 
-        function renderTabs() {
-            const container = document.getElementById('tabs');
-            container.innerHTML = '';
+        // Render danh sách file vào thẻ <select>
+        function renderDropdown() {
+            const selector = document.getElementById('file-selector');
+            selector.innerHTML = ''; // Xoá danh sách cũ
             
             for (let fileName in files) {
-                const group = document.createElement('div');
-                group.className = 'tab-group';
-                
-                const btn = document.createElement('button');
-                btn.className = `tab ${fileName === currentFile ? 'active' : ''}`;
-                btn.innerText = fileName;
-                btn.onclick = () => switchTab(fileName);
-                
-                const del = document.createElement('button');
-                del.className = 'btn-del-file';
-                del.innerHTML = '✕';
-                del.onclick = (e) => { e.stopPropagation(); deleteFile(fileName); };
-                
-                group.appendChild(btn);
-                group.appendChild(del);
-                container.appendChild(group);
+                const option = document.createElement('option');
+                option.value = fileName;
+                option.innerText = fileName;
+                if (fileName === currentFile) {
+                    option.selected = true;
+                }
+                selector.appendChild(option);
             }
         }
 
-        function switchTab(fileName) {
+        // Khi người dùng chọn file khác trong menu thả xuống
+        function onFileSelectChange() {
+            const selector = document.getElementById('file-selector');
+            switchFile(selector.value);
+        }
+
+        // Chuyển đổi nội dung file trong Editor
+        function switchFile(fileName) {
             currentFile = fileName;
             editor.setOption("mode", files[fileName].mode);
             editor.setValue(files[fileName].content);
-            renderTabs();
+            renderDropdown();
+            
+            // Xử lý đồ họa để CodeMirror cập nhật kịp trên điện thoại
             setTimeout(() => editor.refresh(), 50);
         }
 
         function addNewFile() {
             let name = prompt("Tên file mới (VD: app.js, style.css):");
             if (!name || files[name]) return;
-            let mode = name.endsWith('.html') ? 'htmlmixed' : (name.endsWith('.css') ? 'css' : 'javascript');
+            
+            let mode = 'javascript';
+            if (name.endsWith('.html')) mode = 'htmlmixed';
+            else if (name.endsWith('.css')) mode = 'css';
+            
             files[name] = { mode: mode, content: '' };
-            switchTab(name);
+            switchFile(name);
         }
 
-        function deleteFile(fileName) {
+        function deleteCurrentFile() {
             if (Object.keys(files).length <= 1) {
-                alert("Bạn phải giữ lại ít nhất một file.");
+                alert("Bạn phải giữ lại ít nhất một file hệ thống.");
                 return;
             }
-            if (confirm(`Xoá file ${fileName}?`)) {
-                delete files[fileName];
-                if (currentFile === fileName) currentFile = Object.keys(files)[0];
-                renderTabs();
-                switchTab(currentFile);
+            if (confirm(`Bạn có chắc chắn muốn xoá file [${currentFile}] không?`)) {
+                delete files[currentFile];
+                currentFile = Object.keys(files)[0]; // Trở về file đầu tiên
+                renderDropdown();
+                switchFile(currentFile);
             }
         }
 
         function clearCurrentCode() {
-            if (confirm("Xoá sạch code trong file hiện tại?")) {
+            if (confirm(`Xoá toàn bộ code trong file [${currentFile}]?`)) {
                 editor.setValue("");
                 files[currentFile].content = "";
+                localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
             }
         }
 
-        function togglePreview() {
-            const container = document.getElementById('preview-container');
-            const isShowing = container.classList.toggle('show');
-            document.getElementById('view-toggle').style.background = isShowing ? '#50fa7b' : '#bd93f9';
-            document.getElementById('view-toggle').style.color = isShowing ? '#282a36' : 'white';
-            setTimeout(() => editor.refresh(), 350);
+        // --- CÁC HÀM XỬ LÝ PREVIEW TOÀN MÀN HÌNH ---
+
+        function closePreview() {
+            const overlay = document.getElementById('preview-overlay');
+            overlay.classList.remove('active');
+            // Cập nhật lại editor khi quay về
+            setTimeout(() => editor.refresh(), 300);
         }
 
         function runCode() {
-            // Tự động bật Preview nếu đang ẩn khi nhấn Run
-            document.getElementById('preview-container').classList.add('show');
-            document.getElementById('view-toggle').style.background = '#50fa7b';
+            // Hiệu ứng trượt cửa sổ kết quả lên
+            const overlay = document.getElementById('preview-overlay');
+            overlay.classList.add('active');
             
             let html = files['index.html'] ? files['index.html'].content : '';
             let css = '', js = '';
 
+            // Nối tất cả CSS và JS
             for (let f in files) {
                 if (f.endsWith('.css')) css += `<style>${files[f].content}</style>`;
                 if (f.endsWith('.js')) js += `<script>${files[f].content}<\/script>`;
@@ -219,11 +254,10 @@
             preview.open();
             preview.write(html + css + js);
             preview.close();
-            setTimeout(() => editor.refresh(), 350);
         }
 
-        // Khởi tạo ban đầu
-        switchTab(currentFile);
+        // Khởi động file mặc định khi load xong trang
+        switchFile(currentFile);
     </script>
 </body>
 </html>
