@@ -1,1 +1,85 @@
-a
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iOS Code Editor Pro</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        
+        /* Toolbar & Tabs */
+        .toolbar { display: flex; background: #1e1e1e; padding: 5px; gap: 5px; border-bottom: 1px solid #333; }
+        .tab-btn { flex: 1; padding: 10px; border: none; background: #2d2d2d; color: #888; border-radius: 5px; font-size: 14px; }
+        .tab-btn.active { background: #007aff; color: white; }
+        .run-btn { background: #34c759; color: white; padding: 0 20px; border-radius: 5px; border: none; font-weight: bold; }
+
+        /* Editors */
+        .editor-container { flex: 1; position: relative; overflow: hidden; }
+        textarea { 
+            position: absolute; width: 100%; height: 100%; 
+            background: #1e1e1e; color: #d4d4d4; padding: 15px;
+            font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+            font-size: 16px; border: none; outline: none; display: none;
+            resize: none; -webkit-appearance: none;
+        }
+        textarea.active { display: block; }
+
+        /* Preview Area */
+        #preview { flex: 1; width: 100%; border: none; background: white; }
+    </style>
+</head>
+<body>
+
+<div class="toolbar">
+    <button class="tab-btn active" onclick="showTab('html')">HTML</button>
+    <button class="tab-btn" onclick="showTab('css')">CSS</button>
+    <button class="tab-btn" onclick="showTab('js')">JS</button>
+    <button class="run-btn" onclick="runCode()">RUN</button>
+</div>
+
+<div class="editor-container">
+    <textarea id="html-code" class="active" placeholder="" spellcheck="false"></textarea>
+    <textarea id="css-code" placeholder="/* Nhập CSS tại đây */" spellcheck="false"></textarea>
+    <textarea id="js-code" placeholder="// Nhập JavaScript tại đây" spellcheck="false"></textarea>
+</div>
+
+<iframe id="preview"></iframe>
+
+<script>
+    function showTab(lang) {
+        // Đổi màu tab
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        // Hiện editor tương ứng
+        document.querySelectorAll('textarea').forEach(tx => tx.classList.remove('active'));
+        document.getElementById(lang + '-code').classList.add('active');
+    }
+
+    function runCode() {
+        const html = document.getElementById('html-code').value;
+        const css = "<style>" + document.getElementById('css-code').value + "</style>";
+        const js = "<script>" + document.getElementById('js-code').value + "<\/script>";
+        
+        const preview = document.getElementById('preview').contentWindow.document;
+        
+        preview.open();
+        // Hợp nhất cả 3 phần vào iframe
+        preview.write(html + css + js);
+        preview.close();
+    }
+
+    // Tự động lưu vào bộ nhớ trình duyệt để không mất code khi load lại trang
+    const inputs = document.querySelectorAll('textarea');
+    inputs.forEach(input => {
+        const id = input.id;
+        input.value = localStorage.getItem(id) || "";
+        input.addEventListener('input', () => {
+            localStorage.setItem(id, input.value);
+        });
+    });
+</script>
+
+</body>
+</html>
