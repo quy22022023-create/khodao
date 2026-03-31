@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Code Editor">
+    <meta name="theme-color" content="#000000">
+    
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIyIiBmaWxsPSIjMWMxYzFlIi8+PHBhdGggZD0iTTM1IDMwTDE1IDUwTDM1IDcwTTY1IDMwTDg1IDUwTDY1IDcwTTU4IDIwTDQyIDgwIiBzdHJva2U9IiMwYTg0ZmYiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBmaWxsPSJub25lIi8+PC9zdmc+">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIyIiBmaWxsPSIjMWMxYzFlIi8+PHBhdGggZD0iTTM1IDMwTDE1IDUwTDM1IDcwTTY1IDMwTDg1IDUwTDY1IDcwTTU4IDIwTDQyIDgwIiBzdHJva2U9IiMwYTg0ZmYiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBmaWxsPSJub25lIi8+PC9zdmc+">
+
+    <title>iOS Code Editor Pro - Dark Mode</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+</head>
+<body>
+
+    <input type="file" id="file-input" multiple style="display: none;" onchange="importFiles(event)">
+
+    <div class="header">
+        <div class="header-top">
+            <button class="btn-reset-app" onclick="resetAllData()" title="Khôi phục trạng thái ban đầu">
+                <i class="fa-solid fa-power-off"></i>
+            </button>
+            
+            <div class="file-selector-wrapper">
+                <select id="file-selector" onchange="onFileSelectChange()"></select>
+            </div>
+            
+            <button class="btn-run" onclick="runCode()" title="Chạy code">
+                <i class="fa-solid fa-play"></i>
+            </button>
+        </div>
+        
+        <div class="tools">
+            <button class="btn-icon icon-add" onclick="addNewFile()" title="Thêm file mới">
+                <i class="fa-solid fa-file-circle-plus"></i>
+            </button>
+            <button class="btn-icon icon-rename" onclick="renameCurrentFile()" title="Đổi tên file">
+                <i class="fa-solid fa-pen"></i>
+            </button>
+            <button class="btn-icon icon-io" onclick="document.getElementById('file-input').click()" title="Nhập file (Hỗ trợ 1 hoặc nhiều file)">
+                <i class="fa-solid fa-file-import"></i>
+            </button>
+            <button class="btn-icon icon-io" onclick="exportFiles()" title="Xuất file (Có thể chọn xuất tất cả)">
+                <i class="fa-solid fa-file-export"></i>
+            </button>
+            <button class="btn-icon icon-clear" onclick="clearCurrentCode()" title="Xoá Code">
+                <i class="fa-solid fa-eraser"></i>
+            </button>
+            <button class="btn-icon icon-del" onclick="deleteCurrentFile()" title="Xoá File">
+                <i class="fa-solid fa-file-circle-xmark"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="editor-wrapper">
+        <textarea id="code-editor"></textarea>
+    </div>
+    
+    <button class="fab-paste" onclick="pasteFromClipboard()" title="Dán từ Clipboard">
+        <i class="fa-solid fa-paste"></i>
+    </button>
+    
+    <div id="preview-overlay">
+        <div class="preview-header">
+            <div class="preview-title">Kết quả hiển thị</div>
+            <button class="btn-close-preview" onclick="closePreview()" title="Đóng">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+        <iframe id="preview"></iframe>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
