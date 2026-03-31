@@ -3,82 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iOS Code Editor Pro</title>
+    <title>iOS Pro Code Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/javascript/javascript.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        :root { --bg: #282a36; --header: #44475a; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; background: var(--bg); font-family: sans-serif; overflow: hidden; }
         
-        /* Toolbar & Tabs */
-        .toolbar { display: flex; background: #1e1e1e; padding: 5px; gap: 5px; border-bottom: 1px solid #333; }
-        .tab-btn { flex: 1; padding: 10px; border: none; background: #2d2d2d; color: #888; border-radius: 5px; font-size: 14px; }
-        .tab-btn.active { background: #007aff; color: white; }
-        .run-btn { background: #34c759; color: white; padding: 0 20px; border-radius: 5px; border: none; font-weight: bold; }
+        /* Sidebar/Tab Manager */
+        .file-tabs { display: flex; overflow-x: auto; background: var(--header); padding: 5px 5px 0 5px; gap: 2px; }
+        .tab { padding: 8px 15px; background: #6272a4; color: white; border-radius: 5px 5px 0 0; cursor: pointer; white-space: nowrap; font-size: 13px; border: none; opacity: 0.7; }
+        .tab.active { opacity: 1; background: var(--bg); font-weight: bold; }
+        .add-file { padding: 8px 15px; background: #50fa7b; color: black; border-radius: 5px; border: none; font-weight: bold; margin-left: 5px; margin-bottom: 5px; }
 
-        /* Editors */
-        .editor-container { flex: 1; position: relative; overflow: hidden; }
-        textarea { 
-            position: absolute; width: 100%; height: 100%; 
-            background: #1e1e1e; color: #d4d4d4; padding: 15px;
-            font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
-            font-size: 16px; border: none; outline: none; display: none;
-            resize: none; -webkit-appearance: none;
-        }
-        textarea.active { display: block; }
-
-        /* Preview Area */
-        #preview { flex: 1; width: 100%; border: none; background: white; }
+        /* Editor Area */
+        .main-container { flex: 1; display: flex; flex-direction: column; }
+        .CodeMirror { flex: 1; height: auto; font-size: 16px; } /* 16px để tránh zoom iOS */
+        
+        /* Preview */
+        #preview { height: 40%; background: white; border: none; border-top: 4px solid var(--header); }
+        
+        .controls { padding: 10px; background: var(--header); display: flex; justify-content: flex-end; }
+        .run-btn { background: #ff79c6; border: none; padding: 10px 25px; color: white; border-radius: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div class="toolbar">
-    <button class="tab-btn active" onclick="showTab('html')">HTML</button>
-    <button class="tab-btn" onclick="showTab('css')">CSS</button>
-    <button class="tab-btn" onclick="showTab('js')">JS</button>
-    <button class="run-btn" onclick="runCode()">RUN</button>
+<div class="file-tabs" id="tab-container">
+    <button class="add-file" onclick="addNewFile()">+ New File</button>
 </div>
 
-<div class="editor-container">
-    <textarea id="html-code" class="active" placeholder="" spellcheck="false"></textarea>
-    <textarea id="css-code" placeholder="/* Nhập CSS tại đây */" spellcheck="false"></textarea>
-    <textarea id="js-code" placeholder="// Nhập JavaScript tại đây" spellcheck="false"></textarea>
+<div class="main-container">
+    <div id="editor-wrapper"></div>
+    <div class="controls">
+        <button class="run-btn" onclick="runProject()">RUN PROJECT</button>
+    </div>
+    <iframe id="preview"></iframe>
 </div>
-
-<iframe id="preview"></iframe>
 
 <script>
-    function showTab(lang) {
-        // Đổi màu tab
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
+    let files = {
+        "index.html": { content: "<h1>Hello iOS!</h1>", mode: "xml" },
+        "style.css": { content: "h1 { color: pink; }", mode: "css" },
+        "script.js": { content: "console.log('Running...');", mode: "javascript" }
+    };
+    let activeFile = "index.html";
+    let editor;
 
-        // Hiện editor tương ứng
-        document.querySelectorAll('textarea').forEach(tx => tx.classList.remove('active'));
-        document.getElementById(lang + '-code').classList.add('active');
+    // Khởi tạo Editor
+    function initEditor() {
+        editor = CodeMirror(document.getElementById("editor-wrapper"), {
+            lineNumbers: true,
+            theme: "dracula",
+            mode: files[activeFile].mode,
+            value: files[activeFile].content,
+            viewportMargin: Infinity,
+            tabSize: 2
+        });
+
+        editor.on("change", (cm) => {
+            files[activeFile].content = cm.getValue();
+            localStorage.setItem('project_files', JSON.stringify(files));
+        });
     }
 
-    function runCode() {
-        const html = document.getElementById('html-code').value;
-        const css = "<style>" + document.getElementById('css-code').value + "</style>";
-        const js = "<script>" + document.getElementById('js-code').value + "<\/script>";
+    function renderTabs() {
+        const container = document.getElementById("tab-container");
+        container.querySelectorAll('.tab').forEach(t => t.remove());
         
+        Object.keys(files).forEach(fileName => {
+            const btn = document.createElement("button");
+            btn.className = `tab ${fileName === activeFile ? 'active' : ''}`;
+            btn.innerText = fileName;
+            btn.onclick = () => switchFile(fileName);
+            container.insertBefore(btn, container.firstChild);
+        });
+    }
+
+    function switchFile(name) {
+        activeFile = name;
+        editor.setOption("mode", files[name].mode);
+        editor.setValue(files[name].content);
+        renderTabs();
+    }
+
+    function addNewFile() {
+        const name = prompt("Nhập tên file (vd: about.html, theme.css):");
+        if (!name) return;
+        
+        let mode = "xml";
+        if (name.endsWith(".css")) mode = "css";
+        if (name.endsWith(".js")) mode = "javascript";
+        
+        files[name] = { content: "", mode: mode };
+        switchFile(name);
+    }
+
+    function runProject() {
         const preview = document.getElementById('preview').contentWindow.document;
+        let html = files["index.html"] ? files["index.html"].content : "";
         
+        // Tự động tìm các file CSS và JS để nhúng vào index.html
+        let css = "";
+        let js = "";
+        Object.keys(files).forEach(name => {
+            if (name.endsWith(".css")) css += `<style>${files[name].content}</style>`;
+            if (name.endsWith(".js")) js += `<script>${files[name].content}<\/script>`;
+        });
+
         preview.open();
-        // Hợp nhất cả 3 phần vào iframe
         preview.write(html + css + js);
         preview.close();
     }
 
-    // Tự động lưu vào bộ nhớ trình duyệt để không mất code khi load lại trang
-    const inputs = document.querySelectorAll('textarea');
-    inputs.forEach(input => {
-        const id = input.id;
-        input.value = localStorage.getItem(id) || "";
-        input.addEventListener('input', () => {
-            localStorage.setItem(id, input.value);
-        });
-    });
+    // Tải dữ liệu cũ nếu có
+    const saved = localStorage.getItem('project_files');
+    if (saved) files = JSON.parse(saved);
+
+    initEditor();
+    renderTabs();
 </script>
 
 </body>
