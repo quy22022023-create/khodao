@@ -44,7 +44,7 @@
 
     <input type="file" id="file-input" multiple style="display: none;" onchange="importFiles(event)">
 
-    <div class="header">
+    <header class="header">
         <div class="header-top">
             <button class="btn-reset-app" onclick="resetAllData()" title="Khôi phục trạng thái ban đầu">
                 <i class="fa-solid fa-power-off"></i>
@@ -59,7 +59,7 @@
             </button>
         </div>
         
-        <div class="tools">
+        <nav class="tools">
             <button class="btn-icon icon-add" onclick="addNewFile()" title="Thêm file mới">
                 <i class="fa-solid fa-file-circle-plus"></i>
             </button>
@@ -78,18 +78,17 @@
             <button class="btn-icon icon-del" onclick="deleteCurrentFile()" title="Xoá File">
                 <i class="fa-solid fa-file-circle-xmark"></i>
             </button>
-        </div>
-    </div>
+        </nav>
+    </header>
     
-    <div class="main-content">
-        <div class="editor-wrapper">
+    <main class="main-content">
+        <section class="editor-wrapper">
             <textarea id="code-editor"></textarea>
-        </div>
+        </section>
 
-        <div class="keyboard-bar">
+        <aside class="keyboard-bar">
             <button class="key-btn" onclick="undoCode()" title="Hoàn tác"><i class="fa-solid fa-rotate-left"></i></button>
             <button class="key-btn" onclick="redoCode()" title="Làm lại"><i class="fa-solid fa-rotate-right"></i></button>
-            
             <button class="key-btn tab-btn" onclick="insertText('Tab')">Tab</button>
             <button class="key-btn" onclick="insertText('{')">{</button>
             <button class="key-btn" onclick="insertText('}')">}</button>
@@ -104,8 +103,8 @@
             <button class="key-btn" onclick="insertText('&quot;')">"</button>
             <button class="key-btn" onclick="insertText('\'')">'</button>
             <button class="key-btn" onclick="insertText('/')">/</button>
-        </div>
-    </div>
+        </aside>
+    </main>
     
     <button class="fab-paste" onclick="pasteFromClipboard()" title="Dán từ Clipboard">
         <i class="fa-solid fa-paste"></i>
@@ -114,7 +113,7 @@
     <div id="preview-overlay">
         <div class="preview-header">
             <div class="preview-title">Kết quả hiển thị</div>
-            <div style="display: flex; gap: 15px;">
+            <div style="display: flex; gap: 15px; align-items: center;">
                 <button class="btn-console" onclick="toggleConsole()" title="Bật/Tắt Console">
                     <i class="fa-solid fa-terminal"></i> Console
                 </button>
@@ -123,7 +122,9 @@
                 </button>
             </div>
         </div>
-        <iframe id="preview"></iframe>
+        <div id="iframe-container" style="flex: 1; display: flex; flex-direction: column;">
+            <iframe id="preview"></iframe>
+        </div>
         
         <div id="virtual-console" class="virtual-console">
             <div id="console-output"></div>
