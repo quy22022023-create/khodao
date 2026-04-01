@@ -7,8 +7,11 @@ let defaultFiles = {
 };
 
 let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || defaultFiles;
-
 let currentFile = Object.keys(files)[0] || 'new';
+
+// Biến lưu độ lệch dòng để tính toán chính xác vị trí lỗi
+let offsetHTML = 0;
+let offsetJS = 0;
 
 const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
     theme: "dracula",
@@ -20,19 +23,26 @@ const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
     autoCloseTags: true,
     matchBrackets: true,
     styleActiveLine: true,
-    // Cấu hình phím tắt dự phòng cho máy tính
     extraKeys: {"Ctrl-Space": "autocomplete"}
 });
 
-// Lưu code mỗi khi có thay đổi
+// Hàm xoá bôi đỏ dòng lỗi
+function clearErrorLines() {
+    editor.eachLine(function(line) {
+        editor.removeLineClass(line, 'background', 'error-line');
+    });
+}
+
+// Lưu code và xoá báo lỗi mỗi khi có thao tác gõ phím
 editor.on("change", () => {
+    clearErrorLines(); 
     if (files[currentFile]) {
         files[currentFile].content = editor.getValue();
         localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
     }
 });
 
-// Kích hoạt gợi ý Code tự động khi gõ phím
+// Kích hoạt gợi ý Code tự động
 editor.on("inputRead", function(cm, change) {
     if (change.origin !== "+input" || change.text.length !== 1) return;
     let char = change.text[0];
@@ -45,18 +55,48 @@ editor.on("inputRead", function(cm, change) {
     }
 });
 
-// Lắng nghe tín hiệu Console từ Iframe gửi lên App mẹ
+// Lắng nghe tín hiệu Console và BẮT LỖI TỪ IFRAME
 window.addEventListener('message', function(event) {
     if (event.data && event.data.type) {
         const output = document.getElementById('console-output');
         const div = document.createElement('div');
         div.className = event.data.type === 'error' ? 'console-error' : 'console-log';
-        div.textContent = '> ' + event.data.log;
+        
+        let displayLog = '> ' + event.data.log;
+
+        // Bôi đỏ dòng bị lỗi
+        if (event.data.type === 'error' && event.data.line) {
+            let errorLine = parseInt(event.data.line);
+            let actualLine = -1;
+            let currentMode = files[currentFile] ? files[currentFile].mode : '';
+
+            if (currentMode === 'javascript') {
+                actualLine = errorLine - offsetJS - 1; 
+            } else if (currentMode === 'htmlmixed') {
+                actualLine = errorLine - offsetHTML - 1;
+            }
+
+            if (actualLine >= 0) {
+                displayLog = '> Lỗi dòng ' + (actualLine + 1) + ': ' + event.data.log;
+                editor.addLineClass(actualLine, 'background', 'error-line');
+            }
+        }
+
+        div.textContent = displayLog;
         output.appendChild(div);
-        // Tự động cuộn xuống cuối cùng
-        output.scrollTop = output.scrollHeight;
+        output.scrollTop = output.scrollHeight; 
     }
 });
+
+function undoCode() {
+    editor.undo();
+    editor.focus(); 
+}
+
+function redoCode() {
+    editor.redo();
+    editor.focus(); 
+}
 
 function insertText(text) {
     if (text === 'Tab') {
@@ -88,6 +128,7 @@ function switchFile(fileName) {
     currentFile = fileName;
     editor.setOption("mode", files[fileName].mode);
     editor.setValue(files[fileName].content);
+    clearErrorLines();
     renderDropdown();
     setTimeout(() => editor.refresh(), 50);
 }
@@ -145,6 +186,7 @@ function clearCurrentCode() {
         editor.setValue("");
         files[currentFile].content = "";
         localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
+        clearErrorLines();
     }
 }
 
@@ -205,12 +247,10 @@ async function importFiles(event) {
     const importedNames = await Promise.all(readPromises);
     lastFileName = importedNames[importedNames.length - 1]; 
     
-    // TỰ ĐỘNG XOÁ FILE 'new' KHI NHẬP FILE MỚI
     if (files['new']) {
         delete files['new'];
     }
     
-    // Nếu file đang trỏ tới vô tình bị xoá, gán lại thành file vừa nhập cuối cùng
     if (!files[currentFile]) {
         currentFile = lastFileName;
     }
@@ -218,7 +258,6 @@ async function importFiles(event) {
     localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
     event.target.value = ''; 
     
-    // Cập nhật lại danh sách thả xuống và chuyển sang file mới
     renderDropdown();
     switchFile(currentFile);
     
@@ -260,7 +299,6 @@ function closePreview() {
     const iframe = document.getElementById('preview');
     overlay.classList.remove('active');
     
-    // Tự động ẩn Console khi đóng Preview
     document.getElementById('virtual-console').classList.remove('active');
     
     iframe.src = "about:blank"; 
@@ -268,11 +306,12 @@ function closePreview() {
 }
 
 function runCode() {
+    clearErrorLines(); 
+
     const overlay = document.getElementById('preview-overlay');
     const iframe = document.getElementById('preview');
     overlay.classList.add('active');
     
-    // Xoá log cũ trong Console
     document.getElementById('console-output').innerHTML = '';
     
     let htmlContent = "";
@@ -287,15 +326,17 @@ function runCode() {
     let jsContent = "";
 
     for (let f in files) {
-        if (f.endsWith('.css')) cssContent += `\n/* File: ${f} */\n${files[f].content}`;
-        if (f.endsWith('.js')) jsContent += `\n// File: ${f}\n${files[f].content}`;
+        let isCSS = f.endsWith('.css') || files[f].mode === 'css';
+        let isJS = f.endsWith('.js') || files[f].mode === 'javascript';
+        
+        if (isCSS) cssContent += `\n/* File: ${f} */\n${files[f].content}`;
+        if (isJS) jsContent += `\n// File: ${f}\n${files[f].content}`;
     }
 
-    // --- SCRIPT BẮT LỖI (INJECT) ---
     const consoleInterceptor = `
         <script>
             window.onerror = function(message, source, lineno, colno, error) {
-                window.parent.postMessage({ type: 'error', log: 'Lỗi dòng ' + lineno + ': ' + message }, '*');
+                window.parent.postMessage({ type: 'error', log: message, line: lineno }, '*');
                 return true; 
             };
             const originalLog = console.log;
@@ -307,28 +348,32 @@ function runCode() {
             const originalError = console.error;
             console.error = function(...args) {
                 const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
-                window.parent.postMessage({ type: 'error', log: msg }, '*');
+                window.parent.postMessage({ type: 'error', log: msg }, '*'); 
                 originalError.apply(console, args);
             };
         <\/script>
     `;
 
-    // Xây dựng trang hoàn chỉnh, chèn script bắt lỗi lên đầu tiên
-    const finalSource = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            ${consoleInterceptor}
-            <style>${cssContent}</style>
-        </head>
-        <body>
-            ${htmlContent}
-            <script>${jsContent}<\/script>
-        </body>
-        </html>
-    `;
+    let headPart = [
+        "<!DOCTYPE html>",
+        "<html>",
+        "<head>",
+        "<meta charset=\"UTF-8\">",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+        consoleInterceptor,
+        "<style>",
+        cssContent,
+        "</style>",
+        "</head>",
+        "<body>"
+    ].join('\n');
+    
+    let bodyPart = htmlContent + "\n<script>\n";
+
+    offsetHTML = headPart.split('\n').length; 
+    offsetJS = offsetHTML + bodyPart.split('\n').length - 1;
+
+    const finalSource = headPart + "\n" + htmlContent + `\n<script>\n${jsContent}\n<\/script>\n</body>\n</html>`;
 
     const blob = new Blob([finalSource], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -338,6 +383,19 @@ function runCode() {
     }
     
     iframe.src = url;
+}
+
+// --- TỐI ƯU HOÁ API CHO CỘT BÊN PHẢI ---
+if (window.visualViewport) {
+    const adjustViewport = () => {
+        // Thu gọn tổng chiều cao của body để không phần nào bị che dưới bàn phím
+        document.body.style.height = window.visualViewport.height + 'px';
+        window.scrollTo(0, 0); 
+    };
+    
+    window.visualViewport.addEventListener('resize', adjustViewport);
+    window.visualViewport.addEventListener('scroll', adjustViewport);
+    adjustViewport(); 
 }
 
 // Khởi chạy App
