@@ -33,13 +33,19 @@ function clearErrorLines() {
     });
 }
 
-// Lưu code và xoá báo lỗi mỗi khi có thao tác gõ phím
+// --- TỐI ƯU HIỆU SUẤT LƯU FILE: DEBOUNCE ---
+let saveTimeout;
 editor.on("change", () => {
     clearErrorLines(); 
-    if (files[currentFile]) {
-        files[currentFile].content = editor.getValue();
-        localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
-    }
+    clearTimeout(saveTimeout);
+    
+    // Đợi 500ms sau khi ngừng gõ mới lưu vào localStorage để tối ưu RAM/Pin trên iOS
+    saveTimeout = setTimeout(() => {
+        if (files[currentFile]) {
+            files[currentFile].content = editor.getValue();
+            localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
+        }
+    }, 500);
 });
 
 // Kích hoạt gợi ý Code tự động
@@ -64,7 +70,6 @@ window.addEventListener('message', function(event) {
         
         let displayLog = '> ' + event.data.log;
 
-        // Bôi đỏ dòng bị lỗi
         if (event.data.type === 'error' && event.data.line) {
             let errorLine = parseInt(event.data.line);
             let actualLine = -1;
@@ -88,15 +93,8 @@ window.addEventListener('message', function(event) {
     }
 });
 
-function undoCode() {
-    editor.undo();
-    editor.focus(); 
-}
-
-function redoCode() {
-    editor.redo();
-    editor.focus(); 
-}
+function undoCode() { editor.undo(); editor.focus(); }
+function redoCode() { editor.redo(); editor.focus(); }
 
 function insertText(text) {
     if (text === 'Tab') {
@@ -105,6 +103,32 @@ function insertText(text) {
         editor.replaceSelection(text);
     }
     editor.focus();
+}
+
+// --- THUẬT TOÁN BÓC TÁCH FILE BẰNG lastIndexOf ---
+function parseFileMetadata(fileName) {
+    let baseName = fileName;
+    let ext = '';
+    let mode = 'javascript'; // Mặc định
+    
+    const lastDotIndex = fileName.lastIndexOf('.');
+    
+    // Nếu có dấu chấm và không phải ký tự đầu tiên (ví dụ .env)
+    if (lastDotIndex > 0) {
+        baseName = fileName.substring(0, lastDotIndex);
+        ext = fileName.substring(lastDotIndex + 1).toLowerCase();
+    }
+    
+    switch (ext) {
+        case 'html': case 'htm': 
+            mode = 'htmlmixed'; break;
+        case 'css': 
+            mode = 'css'; break;
+        case 'js': case 'json': default: 
+            mode = 'javascript'; break;
+    }
+    
+    return { baseName, ext: ext ? `.${ext}` : '', mode };
 }
 
 function renderDropdown() {
@@ -134,36 +158,38 @@ function switchFile(fileName) {
 }
 
 function addNewFile() {
-    let name = prompt("Tên file mới (VD: app.js, style.css):");
+    let name = prompt("Tên file mới (VD: app.min.js, style.css):");
     if (!name) return;
+    
     if (files[name]) {
         let counter = 1;
-        let newName = `${name}_${counter}`;
+        const meta = parseFileMetadata(name);
+        let newName = `${meta.baseName}_${counter}${meta.ext}`;
         while(files[newName]) {
-            counter++; newName = `${name}_${counter}`;
+            counter++; newName = `${meta.baseName}_${counter}${meta.ext}`;
         }
         name = newName;
     }
-    let mode = 'javascript';
-    if (name.endsWith('.html')) mode = 'htmlmixed';
-    else if (name.endsWith('.css')) mode = 'css';
-    files[name] = { mode: mode, content: '' };
+    
+    const finalMeta = parseFileMetadata(name);
+    files[name] = { mode: finalMeta.mode, content: '' };
     switchFile(name);
 }
 
 function renameCurrentFile() {
     let newName = prompt("Nhập tên mới cho file (VD: index.html, main.js):", currentFile);
     if (!newName || newName === currentFile) return;
+    
     if (files[newName]) {
         alert("Tên file này đã tồn tại!");
         return;
     }
-    let mode = 'javascript';
-    if (newName.endsWith('.html')) mode = 'htmlmixed';
-    else if (newName.endsWith('.css')) mode = 'css';
-    files[newName] = { mode: mode, content: files[currentFile].content };
+    
+    const meta = parseFileMetadata(newName);
+    files[newName] = { mode: meta.mode, content: files[currentFile].content };
     delete files[currentFile];
     currentFile = newName;
+    
     localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
     switchFile(currentFile);
 }
@@ -198,6 +224,7 @@ function resetAllData() {
     }
 }
 
+// --- TỐI ƯU HOÁ TRẢI NGHIỆM DÁN BẢN SAO CHO IOS ---
 async function pasteFromClipboard() {
     try {
         const text = await navigator.clipboard.readText();
@@ -206,7 +233,8 @@ async function pasteFromClipboard() {
             editor.replaceSelection(text);
         }
     } catch (err) {
-        alert("Lỗi truy cập Clipboard.");
+        // Fallback cho trình duyệt chặn quyền hoặc không có HTTPS
+        alert("Trình duyệt không cấp quyền truy cập Clipboard. Vui lòng ấn giữ vào màn hình và chọn 'Dán'.");
     }
 }
 
@@ -222,22 +250,20 @@ async function importFiles(event) {
             reader.onload = e => {
                 const content = e.target.result;
                 let fileName = file.name;
+                
                 if (files[fileName]) {
                     let counter = 1;
-                    let nameParts = fileName.split('.');
-                    let ext = nameParts.length > 1 ? '.' + nameParts.pop() : '';
-                    let baseName = nameParts.join('.');
-                    let newName = `${baseName}_${counter}${ext}`;
+                    const meta = parseFileMetadata(fileName);
+                    let newName = `${meta.baseName}_${counter}${meta.ext}`;
                     while(files[newName]) {
                         counter++;
-                        newName = `${baseName}_${counter}${ext}`;
+                        newName = `${meta.baseName}_${counter}${meta.ext}`;
                     }
                     fileName = newName;
                 }
-                let mode = 'javascript';
-                if (fileName.endsWith('.html')) mode = 'htmlmixed';
-                else if (fileName.endsWith('.css')) mode = 'css';
-                files[fileName] = { mode: mode, content: content };
+                
+                const metaFinal = parseFileMetadata(fileName);
+                files[fileName] = { mode: metaFinal.mode, content: content };
                 resolve(fileName);
             };
             reader.readAsText(file);
@@ -247,20 +273,14 @@ async function importFiles(event) {
     const importedNames = await Promise.all(readPromises);
     lastFileName = importedNames[importedNames.length - 1]; 
     
-    if (files['new']) {
-        delete files['new'];
-    }
-    
-    if (!files[currentFile]) {
-        currentFile = lastFileName;
-    }
+    if (files['new']) { delete files['new']; }
+    if (!files[currentFile]) { currentFile = lastFileName; }
     
     localStorage.setItem('ios_editor_pro_files', JSON.stringify(files));
     event.target.value = ''; 
     
     renderDropdown();
     switchFile(currentFile);
-    
     alert(`Đã nhập ${uploadedFiles.length} file!`);
 }
 
@@ -301,15 +321,23 @@ function closePreview() {
     
     document.getElementById('virtual-console').classList.remove('active');
     
+    // --- TỐI ƯU BỘ NHỚ ---
+    if (iframe.src && iframe.src.startsWith('blob:')) {
+        URL.revokeObjectURL(iframe.src);
+    }
     iframe.src = "about:blank"; 
-    setTimeout(() => editor.refresh(), 300);
+    
+    setTimeout(() => {
+        editor.refresh();
+        editor.focus();
+    }, 450); // Cập nhật lại khung sau khi animation Spring đóng xong
 }
 
 function runCode() {
     clearErrorLines(); 
 
     const overlay = document.getElementById('preview-overlay');
-    const iframe = document.getElementById('preview');
+    const iframeContainer = document.getElementById('iframe-container');
     overlay.classList.add('active');
     
     document.getElementById('console-output').innerHTML = '';
@@ -378,19 +406,36 @@ function runCode() {
     const blob = new Blob([finalSource], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     
-    if (iframe.src && iframe.src.startsWith('blob:')) {
-        URL.revokeObjectURL(iframe.src);
+    // --- LÀM SẠCH IFRAME CŨ (Chống Memory Leak trên RAM iOS) ---
+    const oldIframe = document.getElementById('preview');
+    if (oldIframe) {
+        if (oldIframe.src.startsWith('blob:')) {
+            URL.revokeObjectURL(oldIframe.src);
+        }
+        oldIframe.remove();
     }
     
-    iframe.src = url;
+    // Khởi tạo Iframe mới tinh để cắt đứt các event listener hoặc bộ nhớ rác bị kẹt
+    const newIframe = document.createElement('iframe');
+    newIframe.id = 'preview';
+    newIframe.src = url;
+    iframeContainer.appendChild(newIframe);
 }
 
-// --- TỐI ƯU HOÁ API CHO CỘT BÊN PHẢI ---
+// --- TỐI ƯU HOÁ ĐỒNG BỘ VISUAL VIEWPORT (BÀN PHÍM IOS) ---
 if (window.visualViewport) {
     const adjustViewport = () => {
-        // Thu gọn tổng chiều cao của body để không phần nào bị che dưới bàn phím
         document.body.style.height = window.visualViewport.height + 'px';
         window.scrollTo(0, 0); 
+        
+        // Buộc CodeMirror render lại và cuộn con trỏ lên vùng nhìn thấy được
+        setTimeout(() => {
+            editor.refresh();
+            if (document.activeElement.classList.contains('CodeMirror-scroll')) {
+                const cursor = editor.getCursor();
+                editor.scrollIntoView(cursor);
+            }
+        }, 50);
     };
     
     window.visualViewport.addEventListener('resize', adjustViewport);
