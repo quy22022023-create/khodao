@@ -81,25 +81,30 @@
         </div>
     </div>
     
-    <div class="editor-wrapper">
-        <textarea id="code-editor"></textarea>
-    </div>
+    <div class="main-content">
+        <div class="editor-wrapper">
+            <textarea id="code-editor"></textarea>
+        </div>
 
-    <div class="keyboard-bar">
-        <button class="key-btn" onclick="insertText('Tab')" style="font-size: 14px;">Tab</button>
-        <button class="key-btn" onclick="insertText('{')">{</button>
-        <button class="key-btn" onclick="insertText('}')">}</button>
-        <button class="key-btn" onclick="insertText('(')">(</button>
-        <button class="key-btn" onclick="insertText(')')">)</button>
-        <button class="key-btn" onclick="insertText('[')">[</button>
-        <button class="key-btn" onclick="insertText(']')">]</button>
-        <button class="key-btn" onclick="insertText('<')"><</button>
-        <button class="key-btn" onclick="insertText('>')">></button>
-        <button class="key-btn" onclick="insertText('=')">=</button>
-        <button class="key-btn" onclick="insertText(';')">;</button>
-        <button class="key-btn" onclick="insertText('&quot;')">"</button>
-        <button class="key-btn" onclick="insertText('\'')">'</button>
-        <button class="key-btn" onclick="insertText('/')">/</button>
+        <div class="keyboard-bar">
+            <button class="key-btn" onclick="undoCode()" title="Hoàn tác"><i class="fa-solid fa-rotate-left"></i></button>
+            <button class="key-btn" onclick="redoCode()" title="Làm lại"><i class="fa-solid fa-rotate-right"></i></button>
+            
+            <button class="key-btn tab-btn" onclick="insertText('Tab')">Tab</button>
+            <button class="key-btn" onclick="insertText('{')">{</button>
+            <button class="key-btn" onclick="insertText('}')">}</button>
+            <button class="key-btn" onclick="insertText('(')">(</button>
+            <button class="key-btn" onclick="insertText(')')">)</button>
+            <button class="key-btn" onclick="insertText('[')">[</button>
+            <button class="key-btn" onclick="insertText(']')">]</button>
+            <button class="key-btn" onclick="insertText('<')"><</button>
+            <button class="key-btn" onclick="insertText('>')">></button>
+            <button class="key-btn" onclick="insertText('=')">=</button>
+            <button class="key-btn" onclick="insertText(';')">;</button>
+            <button class="key-btn" onclick="insertText('&quot;')">"</button>
+            <button class="key-btn" onclick="insertText('\'')">'</button>
+            <button class="key-btn" onclick="insertText('/')">/</button>
+        </div>
     </div>
     
     <button class="fab-paste" onclick="pasteFromClipboard()" title="Dán từ Clipboard">
