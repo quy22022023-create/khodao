@@ -1,7 +1,20 @@
+// Khởi tạo file mặc định có cấu trúc chuẩn
 let files = JSON.parse(localStorage.getItem('ios_editor_pro_files')) || {
-    'new': { mode: 'htmlmixed', content: '\n' }
+    'index.html': { 
+        mode: 'htmlmixed', 
+        content: '<!DOCTYPE html>\n<html lang="vi">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Trang của tôi</title>\n</head>\n<body>\n    <h1>Xin chào iOS Code Editor Pro!</h1>\n    <p>Bắt đầu viết mã của bạn tại đây.</p>\n</body>\n</html>' 
+    },
+    'style.css': {
+        mode: 'css',
+        content: 'body {\n    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;\n    text-align: center;\n    padding-top: 50px;\n    background-color: #f0f0f5;\n}\n\nh1 {\n    color: #0a84ff;\n}'
+    },
+    'main.js': {
+        mode: 'javascript',
+        content: 'console.log("App đã sẵn sàng!");\n// Viết mã JavaScript ở đây'
+    }
 };
-let currentFile = Object.keys(files)[0] || 'new';
+
+let currentFile = Object.keys(files)[0] || 'index.html';
 
 const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
     theme: "dracula",
@@ -205,33 +218,66 @@ function downloadSingleFile(filename, content) {
 
 function closePreview() {
     const overlay = document.getElementById('preview-overlay');
+    const iframe = document.getElementById('preview');
     overlay.classList.remove('active');
+    
+    // Xoá trắng iframe để giải phóng bộ nhớ, tránh lag và xung đột mã cũ
+    iframe.src = "about:blank"; 
+    
     setTimeout(() => editor.refresh(), 300);
 }
 
 function runCode() {
     const overlay = document.getElementById('preview-overlay');
+    const iframe = document.getElementById('preview');
     overlay.classList.add('active');
     
-    let html = '';
-    let css = '', js = '';
-
+    let htmlContent = "";
+    
+    // Tìm nội dung HTML
     if (files['index.html']) {
-        html = files['index.html'].content;
+        htmlContent = files['index.html'].content;
     } else {
-        let firstHtml = Object.keys(files).find(k => k.endsWith('.html')) || 'new';
-        if (files[firstHtml]) html = files[firstHtml].content;
+        let firstHtml = Object.keys(files).find(k => k.endsWith('.html'));
+        htmlContent = firstHtml ? files[firstHtml].content : "<body></body>";
     }
+
+    // Gom CSS và JS
+    let cssContent = "";
+    let jsContent = "";
 
     for (let f in files) {
-        if (f.endsWith('.css')) css += `<style>${files[f].content}</style>`;
-        if (f.endsWith('.js')) js += `<script>${files[f].content}<\/script>`;
+        if (f.endsWith('.css')) cssContent += `\n/* File: ${f} */\n${files[f].content}`;
+        if (f.endsWith('.js')) jsContent += `\n// File: ${f}\n${files[f].content}`;
     }
 
-    const preview = document.getElementById('preview').contentWindow.document;
-    preview.open();
-    preview.write(html + css + js);
-    preview.close();
+    // Xây dựng trang hoàn chỉnh
+    const finalSource = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>${cssContent}</style>
+        </head>
+        <body>
+            ${htmlContent}
+            <script>${jsContent}<\/script>
+        </body>
+        </html>
+    `;
+
+    // Render an toàn bằng Blob: Trình duyệt sẽ tạo một môi trường hoàn toàn mới
+    const blob = new Blob([finalSource], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Thu hồi bộ nhớ của lần chạy trước đó
+    if (iframe.src && iframe.src.startsWith('blob:')) {
+        URL.revokeObjectURL(iframe.src);
+    }
+    
+    iframe.src = url;
 }
 
+// Khởi chạy App
 switchFile(currentFile);
