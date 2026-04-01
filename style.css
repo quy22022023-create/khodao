@@ -25,12 +25,15 @@
 }
 
 body, html {
-    width: 100%; height: 100%;
+    width: 100%; 
+    height: 100%;
+    height: 100dvh; /* Hỗ trợ mobile trình duyệt mới */
     overflow: hidden; 
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: #000000; 
     color: var(--text-main);
     display: flex; flex-direction: column;
+    position: relative; 
 }
 
 .header {
@@ -106,9 +109,20 @@ select#file-selector {
 .icon-clear { color: var(--ios-orange); }
 .icon-del { color: var(--ios-red); }
 
+/* --- CẤU TRÚC MỚI: CHIA CỘT EDITOR VÀ KEYBOARD BAR --- */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
 .editor-wrapper { 
-    flex: 1; position: relative; 
-    display: flex; flex-direction: column; 
+    flex: 1; 
+    position: relative; 
+    display: flex; 
+    flex-direction: column; 
 }
 
 .CodeMirror {
@@ -122,19 +136,23 @@ select#file-selector {
     background: var(--bg-surface) !important; border-right: 1px solid var(--border-color) !important;
 }
 
-/* --- Thanh Keyboard Bar --- */
+/* --- Thanh Keyboard Bar: Cột dọc bên phải --- */
 .keyboard-bar {
     display: flex;
-    overflow-x: auto;
+    flex-direction: column; /* Xếp dọc */
+    overflow-y: auto; /* Vuốt dọc */
+    overflow-x: hidden;
     background: rgba(28, 28, 30, 0.95);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid var(--border-color);
-    padding: 8px 10px;
+    border-left: 1px solid var(--border-color); /* Viền trái */
+    padding: 10px 8px;
     gap: 8px;
     -webkit-overflow-scrolling: touch;
     z-index: 50;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    width: 50px; /* Bề ngang cố định */
+    flex-shrink: 0; /* Giữ nguyên chiều rộng không bị ép */
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 .keyboard-bar::-webkit-scrollbar { display: none; }
 
@@ -143,9 +161,9 @@ select#file-selector {
     color: var(--text-main);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    min-width: 42px;
-    height: 42px;
-    font-size: 18px;
+    width: 100%; /* Căng đầy chiều ngang cột */
+    min-height: 42px; /* Đổi thành min-height */
+    font-size: 16px;
     font-family: 'SF Mono', monospace;
     display: flex;
     align-items: center;
@@ -157,11 +175,15 @@ select#file-selector {
 .key-btn:active {
     background: #48484a;
 }
+.tab-btn {
+    font-size: 12px; /* Chữ Tab thu nhỏ cho vừa cột */
+    font-weight: bold;
+}
 
 .fab-paste {
-    position: fixed;
-    bottom: calc(75px + env(safe-area-inset-bottom));
-    right: 20px;
+    position: absolute; 
+    bottom: calc(20px + env(safe-area-inset-bottom)); /* Hạ thấp nút Paste xuống */
+    right: 65px; /* Đẩy sang trái để không đè lên cột bên phải (50px width + 15px gap) */
     width: 54px;
     height: 54px;
     border-radius: 27px;
@@ -183,7 +205,7 @@ select#file-selector {
 }
 
 #preview-overlay {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: #ffffff; 
     z-index: 9999;
     display: flex; flex-direction: column;
@@ -242,4 +264,7 @@ iframe {
 .console-error {
     color: #ff453a; margin-bottom: 8px; border-bottom: 1px dotted #333; padding-bottom: 4px; word-wrap: break-word;
     user-select: text; -webkit-user-select: text;
+}
+.error-line {
+    background-color: rgba(255, 69, 58, 0.25) !important;
 }
