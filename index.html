@@ -46,42 +46,52 @@
 
     <header class="header">
         <div class="header-top">
-            <button class="btn-reset-app" onclick="resetAllData()" title="Khôi phục trạng thái ban đầu">
-                <i class="fa-solid fa-power-off"></i>
+            <button class="btn-icon icon-menu" id="btn-toggle-menu" onclick="toggleMenu()" title="Mở Menu">
+                <i class="fa-solid fa-bars"></i>
             </button>
             
             <div class="file-selector-wrapper">
                 <select id="file-selector" onchange="onFileSelectChange()"></select>
             </div>
             
-            <button class="btn-run" onclick="runCode()" title="Chạy code">
-                <i class="fa-solid fa-play"></i>
+            <div class="header-actions">
+                <button class="btn-icon icon-copy" onclick="copyAllCode()" title="Copy toàn bộ Code">
+                    <i class="fa-regular fa-copy"></i>
+                </button>
+                <button class="btn-icon icon-clear" onclick="clearCurrentCode()" title="Xoá Code">
+                    <i class="fa-solid fa-eraser"></i>
+                </button>
+                <button class="btn-run" onclick="runCode()" title="Chạy code">
+                    <i class="fa-solid fa-play"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="dropdown-menu" class="dropdown-menu">
+            <button class="menu-item" onclick="addNewFile()">
+                <i class="fa-solid fa-file-circle-plus menu-icon-blue"></i> Thêm file mới
+            </button>
+            <button class="menu-item" onclick="renameCurrentFile()">
+                <i class="fa-solid fa-pen menu-icon-yellow"></i> Đổi tên file
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" onclick="document.getElementById('file-input').click()">
+                <i class="fa-solid fa-file-import menu-icon-purple"></i> Nhập file (Import)
+            </button>
+            <button class="menu-item" onclick="exportFiles()">
+                <i class="fa-solid fa-file-export menu-icon-purple"></i> Xuất file (Export)
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item text-danger" onclick="deleteCurrentFile()">
+                <i class="fa-solid fa-file-circle-xmark"></i> Xoá File này
+            </button>
+            <button class="menu-item text-danger" onclick="resetAllData()">
+                <i class="fa-solid fa-power-off"></i> Khôi phục App
             </button>
         </div>
-        
-        <nav class="tools">
-            <button class="btn-icon icon-add" onclick="addNewFile()" title="Thêm file mới">
-                <i class="fa-solid fa-file-circle-plus"></i>
-            </button>
-            <button class="btn-icon icon-rename" onclick="renameCurrentFile()" title="Đổi tên file">
-                <i class="fa-solid fa-pen"></i>
-            </button>
-            <button class="btn-icon icon-io" onclick="document.getElementById('file-input').click()" title="Nhập file (Hỗ trợ 1 hoặc nhiều file)">
-                <i class="fa-solid fa-file-import"></i>
-            </button>
-            <button class="btn-icon icon-io" onclick="exportFiles()" title="Xuất file (Có thể chọn xuất tất cả)">
-                <i class="fa-solid fa-file-export"></i>
-            </button>
-            <button class="btn-icon icon-clear" onclick="clearCurrentCode()" title="Xoá Code">
-                <i class="fa-solid fa-eraser"></i>
-            </button>
-            <button class="btn-icon icon-del" onclick="deleteCurrentFile()" title="Xoá File">
-                <i class="fa-solid fa-file-circle-xmark"></i>
-            </button>
-        </nav>
     </header>
     
-    <main class="main-content">
+    <main class="main-content" onclick="closeMenuOutside(event)">
         <section class="editor-wrapper">
             <textarea id="code-editor"></textarea>
         </section>
@@ -130,6 +140,8 @@
             <div id="console-output"></div>
         </div>
     </div>
+
+    <div id="toast-notification" class="toast">Đã sao chép code!</div>
 
     <script src="script.js"></script>
 </body>
