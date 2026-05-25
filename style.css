@@ -39,28 +39,26 @@ body, html {
     overscroll-behavior-y: none; 
 }
 
+/* =========================================================
+   HEADER & ACTIONS
+   ========================================================= */
 .header {
     background: rgba(28, 28, 30, 0.85);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
     padding: max(10px, env(safe-area-inset-top)) 16px 10px 16px;
     border-bottom: 1px solid var(--border-color);
-    display: flex; flex-direction: column; gap: 12px;
-    z-index: 10;
+    position: relative;
+    z-index: 100; /* Nâng Z-index để menu đè lên code */
 }
 
 .header-top {
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
 }
 
-.btn-reset-app {
-    background: transparent; color: var(--ios-red);
-    border: 1px solid rgba(255, 69, 58, 0.3); border-radius: 12px;
-    width: 44px; height: 44px; font-size: 18px; 
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: all 0.1s; flex-shrink: 0;
+.header-actions {
+    display: flex; gap: 8px; align-items: center;
 }
-.btn-reset-app:active { background: rgba(255, 69, 58, 0.15); transform: scale(0.9); }
 
 .file-selector-wrapper {
     flex: 1; position: relative; display: flex; align-items: center;
@@ -88,13 +86,6 @@ select#file-selector {
 }
 .btn-run:active { transform: scale(0.9); }
 
-.tools { 
-    display: flex; gap: 10px; overflow-x: auto;
-    padding-bottom: 4px; justify-content: flex-start;
-    -webkit-overflow-scrolling: touch;
-}
-.tools::-webkit-scrollbar { display: none; }
-
 .btn-icon { 
     border: none; border-radius: 14px; 
     width: 44px; height: 44px; 
@@ -106,12 +97,71 @@ select#file-selector {
 }
 .btn-icon:active { transform: scale(0.9); background: #3a3a3c; }
 
-.icon-add { color: var(--ios-blue); }
-.icon-rename { color: var(--ios-yellow); }
-.icon-io { color: var(--ios-purple); }
+.icon-menu { color: var(--text-main); }
+.icon-copy { color: var(--ios-blue); }
 .icon-clear { color: var(--ios-orange); }
-.icon-del { color: var(--ios-red); }
 
+/* =========================================================
+   DROPDOWN MENU (TÍNH NĂNG MỚI)
+   ========================================================= */
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 16px;
+    width: 230px;
+    background: rgba(44, 44, 46, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    /* Hiệu ứng ẩn/hiện mượt mà */
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    pointer-events: none;
+    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+    transform-origin: top left;
+}
+
+.dropdown-menu.active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.menu-item {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    padding: 12px 16px;
+    font-size: 16px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.menu-item:active { background: rgba(255, 255, 255, 0.1); }
+
+.menu-item i { font-size: 18px; width: 20px; text-align: center; }
+.menu-icon-blue { color: var(--ios-blue); }
+.menu-icon-yellow { color: var(--ios-yellow); }
+.menu-icon-purple { color: var(--ios-purple); }
+.text-danger { color: var(--ios-red) !important; }
+
+.menu-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 16px;
+}
+
+/* =========================================================
+   EDITOR & MAIN CONTENT
+   ========================================================= */
 .main-content {
     display: flex;
     flex: 1;
@@ -139,32 +189,32 @@ select#file-selector {
 }
 
 /* =========================================================
-   THIẾT KẾ KEYBOARD BAR THEO HÌNH ẢNH MẪU
+   KEYBOARD BAR
    ========================================================= */
 .keyboard-bar {
     display: flex;
     flex-direction: column;
     overflow-y: auto; 
     overflow-x: hidden;
-    background: #18181a; /* Tone nền cực tối giống ảnh */
-    border-left: 1px solid #2a2a2c; /* Viền trái mờ tinh tế */
-    padding: 12px 10px; /* Tăng padding để tạo không gian */
-    gap: 12px; /* Giãn cách các nút theo tỷ lệ hình */
+    background: #18181a; 
+    border-left: 1px solid #2a2a2c; 
+    padding: 12px 10px; 
+    gap: 12px; 
     -webkit-overflow-scrolling: touch;
     z-index: 50;
-    width: 60px; /* Mở rộng xíu để vừa form nút */
+    width: 60px; 
     flex-shrink: 0; 
     padding-bottom: max(16px, env(safe-area-inset-bottom));
 }
 .keyboard-bar::-webkit-scrollbar { display: none; }
 
 .key-btn {
-    background: #2d2d30; /* Nền nút xám đậm */
-    color: #e5e5e5; /* Chữ trắng xám */
-    border: 1px solid #3e3e42; /* Viền mờ bao quanh nút */
-    border-radius: 12px; /* Bo góc mạnh như hình (Pill-like shape) */
+    background: #2d2d30; 
+    color: #e5e5e5; 
+    border: 1px solid #3e3e42; 
+    border-radius: 12px; 
     width: 100%; 
-    min-height: 48px; /* Tăng chiều cao lên 48px để dễ bấm và cân đối */
+    min-height: 48px; 
     font-size: 18px;
     font-family: 'SF Mono', monospace;
     display: flex;
@@ -172,12 +222,12 @@ select#file-selector {
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Tạo hiệu ứng nổi nhẹ 3D */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); 
     transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .key-btn:active {
-    background: #404045; /* Sáng lên khi nhấn */
-    transform: scale(0.92); /* Lún xuống khi bấm */
+    background: #404045; 
+    transform: scale(0.92); 
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 .tab-btn {
@@ -185,12 +235,13 @@ select#file-selector {
     font-weight: 700;
 }
 
-/* ========================================================= */
-
+/* =========================================================
+   NÚT PASTE NỔI (FAB) & TOAST NOTIFICATION
+   ========================================================= */
 .fab-paste {
     position: absolute; 
     bottom: calc(20px + env(safe-area-inset-bottom)); 
-    right: 75px; /* Điều chỉnh tránh đè lên thanh 60px mới */
+    right: 75px; 
     width: 54px;
     height: 54px;
     border-radius: 27px;
@@ -211,8 +262,37 @@ select#file-selector {
     box-shadow: 0 2px 8px rgba(10, 132, 255, 0.3);
 }
 
+.toast {
+    position: fixed;
+    bottom: calc(90px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(28, 28, 30, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 20px;
+    font-size: 15px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10000;
+    border: 1px solid var(--border-color);
+}
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* =========================================================
+   PREVIEW OVERLAY & VIRTUAL CONSOLE
+   ========================================================= */
 #preview-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    position: absolute; top: 0; left: 0; width: 100%; 
+    height: 100dvh; /* Đã fix thành dvh chống bóng ma iOS */
     background: #ffffff; 
     z-index: 9999;
     display: flex; flex-direction: column;
@@ -256,9 +336,7 @@ iframe {
     display: none; flex-direction: column;
     padding-bottom: env(safe-area-inset-bottom);
 }
-.virtual-console.active {
-    display: flex;
-}
+.virtual-console.active { display: flex; }
 #console-output {
     flex: 1; padding: 12px; overflow-y: auto; font-family: 'SF Mono', monospace; font-size: 13px;
     -webkit-overflow-scrolling: touch;
@@ -275,6 +353,9 @@ iframe {
     background-color: rgba(255, 69, 58, 0.25) !important;
 }
 
+/* =========================================================
+   AUTOCOMPLETE HINTS
+   ========================================================= */
 .CodeMirror-hints {
     position: absolute;
     z-index: 10000 !important;
@@ -291,10 +372,7 @@ iframe {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
     max-height: 40vh; 
 }
-
-.CodeMirror-hints::-webkit-scrollbar {
-    display: none; 
-}
+.CodeMirror-hints::-webkit-scrollbar { display: none; }
 
 .CodeMirror-hint {
     margin: 0;
@@ -308,11 +386,7 @@ iframe {
     font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
     transition: background 0.1s;
 }
-
-.CodeMirror-hint:last-child {
-    border-bottom: none;
-}
-
+.CodeMirror-hint:last-child { border-bottom: none; }
 .CodeMirror-hint-active {
     background: var(--ios-blue) !important;
     color: #ffffff !important;
