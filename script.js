@@ -113,7 +113,6 @@ function parseFileMetadata(fileName) {
     
     const lastDotIndex = fileName.lastIndexOf('.');
     
-    // Nếu có dấu chấm và không phải ký tự đầu tiên (ví dụ .env)
     if (lastDotIndex > 0) {
         baseName = fileName.substring(0, lastDotIndex);
         ext = fileName.substring(lastDotIndex + 1).toLowerCase();
@@ -157,7 +156,44 @@ function switchFile(fileName) {
     setTimeout(() => editor.refresh(), 50);
 }
 
+// --- TÍNH NĂNG MỚI: QUẢN LÝ MENU ---
+function toggleMenu() {
+    const menu = document.getElementById('dropdown-menu');
+    menu.classList.toggle('active');
+}
+
+function closeMenuOutside(event) {
+    const menu = document.getElementById('dropdown-menu');
+    const btnMenu = document.getElementById('btn-toggle-menu');
+    if (menu && menu.classList.contains('active')) {
+        // Nếu click không rơi vào menu và không rơi vào nút mở menu thì đóng
+        if (!menu.contains(event.target) && !btnMenu.contains(event.target)) {
+            menu.classList.remove('active');
+        }
+    }
+}
+
+// --- TÍNH NĂNG MỚI: COPY TOÀN BỘ CODE ---
+function copyAllCode() {
+    const code = editor.getValue();
+    if (!code) return;
+    
+    navigator.clipboard.writeText(code).then(() => {
+        const toast = document.getElementById('toast-notification');
+        if (toast) {
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2500);
+        }
+    }).catch(err => {
+        // Fallback
+        alert("Đã xảy ra lỗi khi copy: " + err);
+    });
+}
+
 function addNewFile() {
+    document.getElementById('dropdown-menu').classList.remove('active');
     let name = prompt("Tên file mới (VD: app.min.js, style.css):");
     if (!name) return;
     
@@ -177,6 +213,7 @@ function addNewFile() {
 }
 
 function renameCurrentFile() {
+    document.getElementById('dropdown-menu').classList.remove('active');
     let newName = prompt("Nhập tên mới cho file (VD: index.html, main.js):", currentFile);
     if (!newName || newName === currentFile) return;
     
@@ -195,6 +232,7 @@ function renameCurrentFile() {
 }
 
 function deleteCurrentFile() {
+    document.getElementById('dropdown-menu').classList.remove('active');
     if (Object.keys(files).length <= 1) {
         alert("Bạn phải giữ lại ít nhất một file hệ thống.");
         return;
@@ -217,6 +255,7 @@ function clearCurrentCode() {
 }
 
 function resetAllData() {
+    document.getElementById('dropdown-menu').classList.remove('active');
     const warning = "CẢNH BÁO: Hành động này sẽ xoá sạch TẤT CẢ các file hiện tại.\n\nTiếp tục?";
     if (confirm(warning)) {
         localStorage.removeItem('ios_editor_pro_files');
@@ -233,12 +272,12 @@ async function pasteFromClipboard() {
             editor.replaceSelection(text);
         }
     } catch (err) {
-        // Fallback cho trình duyệt chặn quyền hoặc không có HTTPS
         alert("Trình duyệt không cấp quyền truy cập Clipboard. Vui lòng ấn giữ vào màn hình và chọn 'Dán'.");
     }
 }
 
 async function importFiles(event) {
+    document.getElementById('dropdown-menu').classList.remove('active');
     const uploadedFiles = event.target.files;
     if (uploadedFiles.length === 0) return;
     
@@ -285,6 +324,7 @@ async function importFiles(event) {
 }
 
 function exportFiles() {
+    document.getElementById('dropdown-menu').classList.remove('active');
     let exportAll = confirm("Xuất TẤT CẢ các file (OK) hay chỉ file hiện tại (Cancel)?");
     if (exportAll) {
         let delay = 0;
@@ -297,8 +337,15 @@ function exportFiles() {
     }
 }
 
+// --- FIX LỖI IOS GẮN ĐUÔI .TXT ---
 function downloadSingleFile(filename, content) {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    let mimeType = 'text/plain';
+    if (filename.endsWith('.html') || filename.endsWith('.htm')) mimeType = 'text/html';
+    else if (filename.endsWith('.css')) mimeType = 'text/css';
+    else if (filename.endsWith('.js')) mimeType = 'text/javascript';
+    else if (filename.endsWith('.json')) mimeType = 'application/json';
+
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -321,7 +368,6 @@ function closePreview() {
     
     document.getElementById('virtual-console').classList.remove('active');
     
-    // --- TỐI ƯU BỘ NHỚ ---
     if (iframe.src && iframe.src.startsWith('blob:')) {
         URL.revokeObjectURL(iframe.src);
     }
@@ -330,10 +376,18 @@ function closePreview() {
     setTimeout(() => {
         editor.refresh();
         editor.focus();
-    }, 450); // Cập nhật lại khung sau khi animation Spring đóng xong
+    }, 450);
 }
 
 function runCode() {
+    // --- FIX LỖI ĐEN NỬA MÀN HÌNH (BÓNG MA BÀN PHÍM IOS) ---
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+    if (editor) {
+        editor.getInputField().blur();
+    }
+
     clearErrorLines(); 
 
     const overlay = document.getElementById('preview-overlay');
@@ -406,7 +460,6 @@ function runCode() {
     const blob = new Blob([finalSource], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     
-    // --- LÀM SẠCH IFRAME CŨ (Chống Memory Leak trên RAM iOS) ---
     const oldIframe = document.getElementById('preview');
     if (oldIframe) {
         if (oldIframe.src.startsWith('blob:')) {
@@ -415,7 +468,6 @@ function runCode() {
         oldIframe.remove();
     }
     
-    // Khởi tạo Iframe mới tinh để cắt đứt các event listener hoặc bộ nhớ rác bị kẹt
     const newIframe = document.createElement('iframe');
     newIframe.id = 'preview';
     newIframe.src = url;
@@ -428,7 +480,6 @@ if (window.visualViewport) {
         document.body.style.height = window.visualViewport.height + 'px';
         window.scrollTo(0, 0); 
         
-        // Buộc CodeMirror render lại và cuộn con trỏ lên vùng nhìn thấy được
         setTimeout(() => {
             editor.refresh();
             if (document.activeElement.classList.contains('CodeMirror-scroll')) {
