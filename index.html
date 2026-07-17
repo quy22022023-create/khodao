@@ -39,10 +39,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/html-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/xml-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/anyword-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
     <input type="file" id="file-input" multiple style="display: none;" onchange="importFiles(event)">
+    <input type="file" id="zip-input" accept=".zip,application/zip" style="display: none;" onchange="importZipProject(event)">
 
     <header class="header">
         <div class="header-top">
@@ -74,12 +76,21 @@
             <button class="menu-item" onclick="renameCurrentFile()">
                 <i class="fa-solid fa-pen menu-icon-yellow"></i> Đổi tên file
             </button>
+            <button class="menu-item" id="btn-open-tools" onclick="openToolsPanel()">
+                <i class="fa-solid fa-wand-magic-sparkles menu-icon-blue"></i> Công cụ sửa nhanh
+            </button>
             <div class="menu-divider"></div>
             <button class="menu-item" onclick="document.getElementById('file-input').click()">
                 <i class="fa-solid fa-file-import menu-icon-purple"></i> Nhập file (Import)
             </button>
+            <button class="menu-item" onclick="document.getElementById('zip-input').click()">
+                <i class="fa-solid fa-file-zipper menu-icon-yellow"></i> Nhập dự án ZIP
+            </button>
             <button class="menu-item" onclick="exportFiles()">
                 <i class="fa-solid fa-file-export menu-icon-purple"></i> Xuất file (Export)
+            </button>
+            <button class="menu-item" onclick="exportProjectZip()">
+                <i class="fa-solid fa-box-archive menu-icon-blue"></i> Xuất dự án ZIP
             </button>
             <div class="menu-divider"></div>
             <button class="menu-item text-danger" onclick="deleteCurrentFile()">
@@ -141,7 +152,207 @@
         </div>
     </div>
 
-    <div id="toast-notification" class="toast">Đã sao chép code!</div>
+    <div id="toast-notification" class="toast" role="status" aria-live="polite">
+        Đã sao chép code!
+    </div>
+
+    <!-- =====================================================
+         VERSION 1.2 - QUICK EDIT TOOLS
+         Chỉ bổ sung giao diện, giữ nguyên toàn bộ ID và chức năng cũ
+    ====================================================== -->
+
+    <div
+        id="tools-backdrop"
+        class="tools-backdrop"
+        onclick="closeToolsPanel()"
+        aria-hidden="true">
+    </div>
+
+    <section
+        id="tools-panel"
+        class="tools-panel"
+        aria-label="Công cụ sửa code nhanh"
+        aria-hidden="true">
+
+        <div class="tools-panel-handle" aria-hidden="true"></div>
+
+        <div class="tools-panel-header">
+            <div class="tools-panel-title-group">
+                <span class="tools-panel-icon">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </span>
+
+                <div>
+                    <h2 class="tools-panel-title">Công cụ sửa nhanh</h2>
+                    <p id="tools-current-file" class="tools-panel-subtitle">
+                        File hiện tại
+                    </p>
+                </div>
+            </div>
+
+            <button
+                id="btn-close-tools"
+                class="tools-close-btn"
+                type="button"
+                onclick="closeToolsPanel()"
+                aria-label="Đóng công cụ">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="tools-panel-body">
+
+            <div id="tools-home-view" class="tools-view active">
+
+                <div class="tools-section-label">Điều hướng code</div>
+
+                <div class="tools-grid">
+                    <button
+                        id="tool-search-code"
+                        class="tools-card"
+                        type="button"
+                        onclick="openSearchTool()">
+                        <span class="tools-card-icon tools-card-icon-blue">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Tìm code</strong>
+                            <small>Tìm từ khóa và nhảy tới kết quả</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+
+                    <button
+                        id="tool-go-line"
+                        class="tools-card"
+                        type="button"
+                        onclick="openGoToLineTool()">
+                        <span class="tools-card-icon tools-card-icon-orange">
+                            <i class="fa-solid fa-location-crosshairs"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Đi tới dòng</strong>
+                            <small>Nhập số dòng cần mở</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+
+                    <button
+                        id="tool-code-region"
+                        class="tools-card"
+                        type="button"
+                        onclick="openRegionNavigator()">
+                        <span class="tools-card-icon tools-card-icon-purple">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Khu vực code</strong>
+                            <small>Đi tới các phần được đánh dấu</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+
+                    <button
+                        id="tool-functions"
+                        class="tools-card"
+                        type="button"
+                        onclick="openFunctionNavigator()">
+                        <span class="tools-card-icon tools-card-icon-green">
+                            <i class="fa-solid fa-code"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Danh sách hàm</strong>
+                            <small>Chọn hàm để mở đúng vị trí</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+                </div>
+
+                <div class="tools-section-label tools-section-label-spaced">
+                    An toàn dữ liệu
+                </div>
+
+                <div class="tools-grid">
+                    <button
+                        id="tool-safe-delete"
+                        class="tools-card"
+                        type="button"
+                        onclick="openSafeDeleteTool()">
+                        <span class="tools-card-icon tools-card-icon-red">
+                            <i class="fa-solid fa-scissors"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Xóa cụm code an toàn</strong>
+                            <small>Chọn, xem trước, backup rồi mới xóa</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+
+                    <button
+                        id="tool-create-backup"
+                        class="tools-card"
+                        type="button"
+                        onclick="createManualBackup()">
+                        <span class="tools-card-icon tools-card-icon-yellow">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Tạo bản sao lưu</strong>
+                            <small>Lưu toàn bộ file trước khi sửa</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+
+                    <button
+                        id="tool-backup-history"
+                        class="tools-card"
+                        type="button"
+                        onclick="openBackupHistory()">
+                        <span class="tools-card-icon tools-card-icon-red">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </span>
+                        <span class="tools-card-content">
+                            <strong>Lịch sử sao lưu</strong>
+                            <small>Xem và khôi phục phiên bản cũ</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right tools-card-arrow"></i>
+                    </button>
+                </div>
+
+            </div>
+
+            <div id="tools-detail-view" class="tools-view">
+                <div class="tools-detail-header">
+                    <button
+                        id="btn-tools-back"
+                        class="tools-back-btn"
+                        type="button"
+                        onclick="showToolsHome()">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span>Quay lại</span>
+                    </button>
+
+                    <h3 id="tools-detail-title">Công cụ</h3>
+                </div>
+
+                <div id="tools-detail-content" class="tools-detail-content">
+                    <!-- Nội dung tìm kiếm, danh sách hàm, khu vực code và backup
+                         sẽ được script.js tạo động tại đây. -->
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <div id="safe-delete-undo" class="safe-delete-undo" role="status" aria-live="polite">
+        <div class="safe-delete-undo-message">
+            <i class="fa-solid fa-circle-check"></i>
+            <span id="safe-delete-undo-text">Đã xóa cụm code</span>
+        </div>
+        <button type="button" onclick="undoLastSafeDeletion()">
+            Hoàn tác
+        </button>
+    </div>
 
     <script src="script.js"></script>
 </body>
