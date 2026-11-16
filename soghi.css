@@ -95,22 +95,25 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   box-shadow:var(--shadow); padding:13px 10px 14px; position:relative; overflow:hidden;
 }
 .book-paper:before { content:""; position:absolute; top:0; bottom:0; left:7px; width:1px; background:rgba(190,155,130,.22); }
-.paper-caption { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:0 5px 10px 9px; color:#7c877d; font-size:11px; }
+.paper-caption { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:0 5px 10px 9px; color:#7c877d; font-size:12px; font-family:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive; }
 .paper-caption strong { color:var(--green); font-size:12px; }
 .notebook-grid-wrap { width:100%; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; scrollbar-color:#b7c9ba transparent; }
 .notebook-grid {
   display:grid; grid-auto-flow:column; grid-template-rows:repeat(7, minmax(48px, 1fr));
   grid-template-columns:repeat(var(--columns), minmax(0, 1fr));
+  column-gap:12px;
   width:max(100%, calc(var(--columns) * 54px)); min-width:max(100%, calc(var(--columns) * 54px));
-  border-top:1px solid var(--line); border-left:1px solid var(--line);
+  border:0; padding:0 4px;
 }
 .entry-cell, .empty-cell {
   min-width:0; min-height:48px; display:flex; align-items:center; justify-content:center;
-  border:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line);
-  background:transparent; color:#263c2c; font-size:clamp(14px, 3.6vw, 18px); font-weight:600;
-  font-variant-numeric:tabular-nums;
+  border:0; border-bottom:1px solid #c9d6cb;
+  background:linear-gradient(to bottom, rgba(255,255,255,.12), rgba(241,247,239,.24));
+  color:#234a32; font-family:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive;
+  font-size:clamp(18px, 4.4vw, 23px); font-weight:600;
+  font-variant-numeric:tabular-nums; letter-spacing:.2px;
 }
-.entry-cell { cursor:pointer; }
+.entry-cell { cursor:pointer; border-radius:3px 3px 0 0; }
 .entry-cell:hover { background:#edf5ec; }
 .empty-cell { color:transparent; }
 .summary-rule { height:2px; background:#536c58; margin:15px 3px 12px; opacity:.75; }
@@ -164,4 +167,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .brand h1 { font-size:16px; }
   .person-tools button { width:30px; }
   .book-topbar { padding-left:10px; padding-right:10px; }
+}
+
+/* Số kg theo nét chữ viết tay; vùng ghi chỉ dùng kẻ ngang như sổ giấy. */
+.form-field input.numeric-entry {
+  font-size:26px;
+  font-weight:700;
+  letter-spacing:1px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
 }
