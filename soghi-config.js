@@ -4,7 +4,7 @@
  */
 window.SOGHI_CONFIG = Object.freeze({
   mode: "auto",
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://awxkvzkigfxoidnvmxew.supabase.co",
+  supabaseAnonKey: "sb_publishable_gI2Eik7X7NdeZsq27bfmUg_th3s7c-1",
   tablePrefix: "soghi_"
 });
