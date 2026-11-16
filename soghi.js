@@ -13,6 +13,9 @@
   const modalActions = $("#soghi-modal-actions");
   const toastNode = $("#soghi-toast");
   const importInput = $("#soghi-import-file");
+  const entryDock = $("#soghi-entry-dock");
+  const entryInput = $("#soghi-entry-value");
+  const entrySubmit = $("#soghi-entry-submit");
 
   const state = {
     db: null,
@@ -24,7 +27,8 @@
     search: "",
     settings: { theme: "green" },
     toastTimer: null,
-    swipeStart: null
+    swipeStart: null,
+    editingEntryId: null
   };
 
   function todayISO() {
@@ -287,6 +291,7 @@
   }
 
   async function renderHome() {
+    hideEntryDock();
     state.screen = "home";
     state.currentHarvesterId = null;
     const { harvesters, entries } = await getAccountData();
@@ -349,9 +354,11 @@
     app.querySelectorAll("[data-open-person]").forEach(node => node.addEventListener("click", () => {
       state.currentHarvesterId = node.dataset.openPerson;
       state.currentDate = todayISO();
-      // Open the number-entry sheet directly from the tap gesture so iOS Safari
-      // can present its numeric keyboard without requiring a second tap on "+".
-      openEntryModal();
+      state.editingEntryId = null;
+      showEntryDock(true);
+      // Keep this focus call synchronous in the original tap handler for iOS Safari.
+      entryInput.value = "";
+      entryInput.focus({ preventScroll: true });
       renderBook();
     }));
     app.querySelectorAll("[data-edit-person]").forEach(node => node.addEventListener("click", () => editPerson(node.dataset.editPerson)));
@@ -454,15 +461,32 @@
         ${connectionHTML()}
       </main>
 `;
-    $("#back-home").addEventListener("click", renderHome);
+    $("#back-home").addEventListener("click", () => {
+      hideEntryDock();
+      renderHome();
+    });
     $("#book-settings").addEventListener("click", openSettings);
     $("#book-date").addEventListener("change", event => {
       if (event.target.value) { state.currentDate = event.target.value; renderBook(); }
     });
     $("#previous-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, -1); renderBook(); });
     $("#next-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, 1); renderBook(); });
-    app.querySelectorAll("[data-entry-id]").forEach(node => node.addEventListener("click", () => editEntry(node.dataset.entryId)));
-    app.querySelectorAll("[data-add-entry]").forEach(node => node.addEventListener("click", () => openEntryModal()));
+    app.querySelectorAll("[data-entry-id]").forEach(node => node.addEventListener("click", async () => {
+      const entry = await getOne("entries", node.dataset.entryId);
+      if (!entry || entry.accountId !== state.account.id) return;
+      state.editingEntryId = entry.id;
+      showEntryDock(true);
+      entryInput.value = String(entry.kg);
+      entryInput.focus({ preventScroll: true });
+      entryInput.select();
+      entrySubmit.textContent = "SỬA";
+    }));
+    app.querySelectorAll("[data-add-entry]").forEach(node => node.addEventListener("click", () => {
+      state.editingEntryId = null;
+      showEntryDock(true);
+      entryInput.value = "";
+      entryInput.focus({ preventScroll: true });
+    }));
     const paper = $("#book-paper");
     paper.addEventListener("touchstart", event => {
       if (event.target.closest(".notebook-grid-wrap")) return;
@@ -481,6 +505,61 @@
       }
     }, { passive: true });
   }
+
+  function showEntryDock(focus = false) {
+    entryDock.hidden = false;
+    document.body.classList.add("entry-active");
+    if (!state.editingEntryId) entrySubmit.textContent = "GHI";
+    if (focus) {
+      // Called from a real tap where possible; the persistent input is not replaced
+      // when the book screen re-renders, so the keyboard can remain open.
+      entryInput.focus({ preventScroll: true });
+    }
+  }
+  function hideEntryDock() {
+    entryDock.hidden = true;
+    document.body.classList.remove("entry-active");
+    state.editingEntryId = null;
+    entryInput.value = "";
+    entryInput.blur();
+    entrySubmit.textContent = "GHI";
+  }
+
+  entryDock.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!state.account || !state.currentHarvesterId || state.screen !== "book") return;
+    const kg = parseKg(entryInput.value);
+    if (kg === null) {
+      showToast("Nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
+      entryInput.focus({ preventScroll: true });
+      return;
+    }
+    try {
+      if (state.editingEntryId) {
+        const entry = await getOne("entries", state.editingEntryId);
+        if (!entry || entry.accountId !== state.account.id) throw new Error("Không tìm thấy số kg cần sửa.");
+        entry.kg = kg;
+        entry.updatedAt = new Date().toISOString();
+        await put("entries", entry);
+        state.editingEntryId = null;
+        entrySubmit.textContent = "GHI";
+        showToast("Đã sửa số kg.");
+      } else {
+        await put("entries", {
+          id: randomId(), accountId: state.account.id, harvesterId: state.currentHarvesterId,
+          date: state.currentDate, kg, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+        showToast("Đã ghi " + formatNumber(kg) + " kg.");
+      }
+      entryInput.value = "";
+      // Re-render only the book area; the persistent dock/input stays mounted and focused.
+      await renderBook();
+      entryInput.focus({ preventScroll: true });
+    } catch (error) {
+      showToast(error.message || "Không thể lưu số kg.");
+      entryInput.focus({ preventScroll: true });
+    }
+  });
 
   function parseKg(value) {
     const normalized = String(value ?? "").trim().replace(",", ".");
