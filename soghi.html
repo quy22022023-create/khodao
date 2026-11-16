@@ -31,6 +31,12 @@
     </form>
   </dialog>
 
+  <form id="soghi-entry-dock" class="soghi-entry-dock" autocomplete="off" hidden>
+    <label class="soghi-entry-label" for="soghi-entry-value">KG</label>
+    <input id="soghi-entry-value" name="kg" type="number" inputmode="decimal" enterkeyhint="done"
+      min="0" step="0.01" placeholder="Nhập số kg" aria-label="Nhập số kg">
+    <button id="soghi-entry-submit" type="submit">GHI</button>
+  </form>
   <input id="soghi-import-file" type="file" accept="application/json,.json" hidden>
   <div id="soghi-toast" class="soghi-toast" role="status" aria-live="polite"></div>
 </body>
