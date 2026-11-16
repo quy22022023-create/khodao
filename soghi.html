@@ -31,14 +31,12 @@
     </form>
   </dialog>
 
-  <form id="soghi-entry-dock" class="soghi-entry-dock" autocomplete="off" hidden>
-    <button id="soghi-keyboard-toggle" class="soghi-pencil-button" type="button" aria-label="Mở bàn phím nhập kg" aria-expanded="false">✎</button>
-    <label class="soghi-entry-label" for="soghi-entry-value">KG</label>
-    <input id="soghi-entry-value" name="kg" type="text" inputmode="none" autocomplete="off"
-      placeholder="Chạm bút để nhập kg" aria-label="Sản lượng kg" readonly>
-    <button id="soghi-entry-submit" type="submit">GHI</button>
-  </form>
+  <div id="soghi-entry-dock" class="soghi-entry-dock" hidden>
+    <button id="soghi-keyboard-toggle" class="soghi-pencil-button" type="button"
+      aria-label="Mở bàn phím nhập kg" aria-expanded="false">✎</button>
+  </div>
   <section id="soghi-virtual-keyboard" class="soghi-virtual-keyboard" aria-label="Bàn phím nhập số" hidden>
+    <div id="soghi-kg-display" class="soghi-kg-display">Chưa nhập</div>
     <div class="soghi-keyboard-grid">
       <button type="button" data-key="1">1</button>
       <button type="button" data-key="2">2</button>
