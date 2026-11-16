@@ -1,8 +1,6 @@
-/*
- * CẤU HÌNH DỰ ÁN SỔ GHI
- * Giai đoạn kiểm thử giao diện: chạy ở chế độ local-demo bằng IndexedDB.
- * Sau khi duyệt web và tạo schema SQL, mới điền thông tin Supabase tại đây
- * và bật phần đồng bộ cloud trong soghi.js.
+/* Cấu hình hiện tại: lưu IndexedDB, chưa triển khai kết nối Supabase.
+ * Chỉ bổ sung cloud sau khi kiểm tra schema và duyệt phương án đồng bộ.
+ * Không đặt service_role key trong mã trình duyệt.
  */
 window.SOGHI_CONFIG = Object.freeze({
   mode: "local-demo",
