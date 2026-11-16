@@ -394,3 +394,59 @@ body.entry-active.keyboard-open .book-wrap { padding-bottom:calc(390px + env(saf
   .book-paper.flip-out-next, .book-paper.flip-out-prev,
   .book-paper.flip-in-next, .book-paper.flip-in-prev { animation-duration:.01ms; }
 }
+
+/* Bố cục mới: bàn phím chạm sát đáy màn hình, bút nằm trên thanh tiêu đề sổ. */
+.soghi-entry-dock {
+  position:static;
+  z-index:auto;
+  display:flex;
+  align-items:center;
+  width:auto;
+  margin-left:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+.soghi-entry-dock[hidden] { display:none !important; }
+.soghi-pencil-button {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 44px;
+  width:44px;
+  height:44px;
+  border:0;
+  border-radius:13px;
+  background:var(--green-2);
+  color:#fff;
+  font-size:25px;
+  line-height:1;
+  box-shadow:none;
+}
+.soghi-pencil-button[aria-expanded="true"] {
+  background:#155d34;
+  color:#fff;
+}
+.soghi-virtual-keyboard {
+  position:fixed;
+  z-index:40;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  margin:0;
+  border-radius:18px 18px 0 0;
+}
+body.entry-active .book-wrap {
+  padding-bottom:calc(390px + env(safe-area-inset-bottom, 0px));
+}
+body.entry-active.keyboard-open .book-wrap {
+  padding-bottom:calc(400px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-height:700px) {
+  body.entry-active .book-wrap,
+  body.entry-active.keyboard-open .book-wrap {
+    padding-bottom:calc(330px + env(safe-area-inset-bottom, 0px));
+  }
+}
