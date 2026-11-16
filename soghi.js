@@ -349,6 +349,9 @@
     app.querySelectorAll("[data-open-person]").forEach(node => node.addEventListener("click", () => {
       state.currentHarvesterId = node.dataset.openPerson;
       state.currentDate = todayISO();
+      // Open the number-entry sheet directly from the tap gesture so iOS Safari
+      // can present its numeric keyboard without requiring a second tap on "+".
+      openEntryModal();
       renderBook();
     }));
     app.querySelectorAll("[data-edit-person]").forEach(node => node.addEventListener("click", () => editPerson(node.dataset.editPerson)));
@@ -420,7 +423,7 @@
         const entry = dayEntries[col * 7 + row];
         cells += entry
           ? `<button type="button" class="entry-cell" data-entry-id="${escapeHTML(entry.id)}" aria-label="${formatNumber(entry.kg)} kg">${formatNumber(entry.kg)}</button>`
-          : `<div class="empty-cell" aria-hidden="true"></div>`;
+          : `<button type="button" class="empty-cell" data-add-entry aria-label="Nhập số kg vào ô trống"></button>`;
       }
     }
     const total = dayEntries.reduce((sum, entry) => sum + Number(entry.kg), 0);
@@ -450,7 +453,7 @@
         </section>
         ${connectionHTML()}
       </main>
-      <button class="fab book-fab" id="add-entry" aria-label="Nhập số kg">＋</button>`;
+`;
     $("#back-home").addEventListener("click", renderHome);
     $("#book-settings").addEventListener("click", openSettings);
     $("#book-date").addEventListener("change", event => {
@@ -458,8 +461,8 @@
     });
     $("#previous-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, -1); renderBook(); });
     $("#next-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, 1); renderBook(); });
-    $("#add-entry").addEventListener("click", () => openEntryModal());
     app.querySelectorAll("[data-entry-id]").forEach(node => node.addEventListener("click", () => editEntry(node.dataset.entryId)));
+    app.querySelectorAll("[data-add-entry]").forEach(node => node.addEventListener("click", () => openEntryModal()));
     const paper = $("#book-paper");
     paper.addEventListener("touchstart", event => {
       if (event.target.closest(".notebook-grid-wrap")) return;
@@ -489,7 +492,7 @@
   function openEntryModal() {
     showModal("Nhập số kg", `
       <div class="form-field"><label for="entry-kg">Sản lượng (kg)</label><input id="entry-kg" class="numeric-entry" name="kg" type="number" inputmode="decimal" enterkeyhint="done" min="0" step="0.01" placeholder="Nhập số kg" required autofocus></div>
-      <p class="form-hint">Số mới sẽ được thêm vào cuối danh sách của ngày ${formatDate(state.currentDate)}.</p>
+      <p class="form-hint">Nhập số cân rồi nhấn Enter/Done để ghi ngay vào sổ ngày ${formatDate(state.currentDate)}.</p>
     `, `<button type="button" class="secondary-button" data-cancel>Hủy</button><button type="submit" class="primary-button">Ghi vào sổ</button>`, async data => {
       const kg = parseKg(data.get("kg"));
       if (kg === null) throw new Error("Vui lòng nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
