@@ -1,9 +1,9 @@
-/* Cấu hình hiện tại: lưu IndexedDB, chưa triển khai kết nối Supabase.
- * Chỉ bổ sung cloud sau khi kiểm tra schema và duyệt phương án đồng bộ.
- * Không đặt service_role key trong mã trình duyệt.
+/* Chạy soghi-supabase.sql trước, sau đó điền 2 giá trị bên dưới.
+ * mode: "auto" bật cloud khi có URL/key; để trống thì dùng dữ liệu cục bộ.
+ * Chỉ dùng publishable/anon key; không dùng service_role hoặc secret key.
  */
 window.SOGHI_CONFIG = Object.freeze({
-  mode: "local-demo",
+  mode: "auto",
   supabaseUrl: "",
   supabaseAnonKey: "",
   tablePrefix: "soghi_"
