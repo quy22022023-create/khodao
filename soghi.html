@@ -8,8 +8,12 @@
   <title>Sổ Ghi Công Hái</title>
   <link rel="manifest" href="soghi.webmanifest">
   <link rel="icon" href="soghi-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="soghi-icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="soghi.css">
   <script src="soghi-config.js"></script>
+  <script defer src="soghi-ledger.js"></script>
   <script defer src="soghi.js"></script>
 </head>
 <body>
@@ -36,7 +40,15 @@
       aria-label="Mở bàn phím nhập kg" aria-expanded="false">✎</button>
   </div>
   <section id="soghi-virtual-keyboard" class="soghi-virtual-keyboard" aria-label="Bàn phím nhập số" hidden>
-    <div id="soghi-kg-display" class="soghi-kg-display">Chưa nhập</div>
+    <div class="soghi-keyboard-tools">
+      <span id="soghi-entry-mode">Số mới · ENTER để lưu</span>
+      <button type="button" id="soghi-cancel-entry" hidden>Hủy nhập</button>
+      <button type="button" id="soghi-delete-entry" class="delete-entry" hidden>Xóa số</button>
+    </div>
+    <div class="soghi-display-row">
+      <span id="soghi-live-summary" class="soghi-live-summary"></span>
+      <div id="soghi-kg-display" class="soghi-kg-display">Chưa nhập</div>
+    </div>
     <div class="soghi-keyboard-grid">
       <button type="button" data-key="1">1</button>
       <button type="button" data-key="2">2</button>
