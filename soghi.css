@@ -177,3 +177,58 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   text-align:center;
   font-variant-numeric:tabular-nums;
 }
+
+/* Thanh nhập kg cố định, không dùng popup/modal. Giữ input tồn tại khi đổi trang sổ. */
+.soghi-entry-dock {
+  position:fixed;
+  z-index:30;
+  left:0;
+  right:0;
+  bottom:env(safe-area-inset-bottom, 0px);
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:9px 12px calc(9px + env(safe-area-inset-bottom, 0px));
+  background:rgba(250,252,248,.98);
+  border-top:1px solid #dce5dc;
+  box-shadow:0 -5px 18px rgba(28,54,34,.10);
+}
+.soghi-entry-dock[hidden] { display:none !important; }
+.soghi-entry-label {
+  color:var(--green);
+  font-size:12px;
+  font-weight:850;
+  letter-spacing:.5px;
+  padding:0 3px;
+}
+.soghi-entry-dock input {
+  min-width:0;
+  flex:1;
+  height:48px;
+  border:1.5px solid #cbd9cc;
+  border-radius:12px;
+  background:#fff;
+  color:#203b29;
+  text-align:center;
+  font-family:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive;
+  font-size:23px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  outline:none;
+}
+.soghi-entry-dock input:focus {
+  border-color:var(--green-2);
+  box-shadow:0 0 0 3px rgba(33,132,74,.13);
+}
+.soghi-entry-dock button {
+  flex:0 0 76px;
+  height:48px;
+  border:0;
+  border-radius:12px;
+  background:var(--green-2);
+  color:#fff;
+  font-weight:850;
+  letter-spacing:.4px;
+}
+body.entry-active .book-wrap { padding-bottom:145px; }
+body.entry-active .soghi-toast { bottom:calc(78px + env(safe-area-inset-bottom)); }
