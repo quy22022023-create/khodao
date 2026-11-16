@@ -1,4 +1,4 @@
-const CACHE_NAME = "soghi-static-v7";
+const CACHE_NAME = "soghi-static-v8";
 const ASSETS = [
   "./soghi.html",
   "./soghi.css",
