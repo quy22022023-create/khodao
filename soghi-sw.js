@@ -1,8 +1,8 @@
 /* Chỉ quản lý tài nguyên Sổ Ghi; không đụng cache của ứng dụng khác. */
 const CACHE_PREFIX = `soghi-static-${new URL(self.registration.scope).pathname}-`;
-const CACHE_NAME = CACHE_PREFIX + "v9";
+const CACHE_NAME = CACHE_PREFIX + "v10";
 const ASSETS = [
-  "soghi.html", "soghi.css", "soghi.js", "soghi-ledger.js", "soghi-config.js",
+  "soghi.html", "soghi.css", "soghi.js", "soghi-ledger.js", "soghi-sync.js", "soghi-config.js",
   "soghi.webmanifest", "soghi-icon.svg", "soghi-icon-180.png", "soghi-icon-192.png", "soghi-icon-512.png"
 ].map(name => new URL(name, self.registration.scope).href);
 const ALLOWED = new Set(ASSETS);
