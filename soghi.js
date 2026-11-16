@@ -490,6 +490,8 @@
         ${connectionHTML()}
       </main>
 `;
+    // Move the pencil toggle into the top bar so it no longer competes with the keypad.
+    $("#book-settings").insertAdjacentElement("beforebegin", entryDock);
     $("#back-home").addEventListener("click", () => {
       hideEntryDock();
       renderHome();
