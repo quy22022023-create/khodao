@@ -1,0 +1,17 @@
+{
+  "name": "Sổ Ghi Công Hái",
+  "short_name": "Sổ Ghi",
+  "start_url": "./soghi.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f1",
+  "theme_color": "#176b3a",
+  "icons": [
+    {
+      "src": "soghi-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
