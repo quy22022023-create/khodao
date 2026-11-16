@@ -305,3 +305,92 @@ body.entry-active.keyboard-open .book-wrap { padding-bottom:calc(390px + env(saf
   .soghi-keyboard-grid button { height:44px; }
   .soghi-keyboard-grid .key-enter { height:42px; }
 }
+
+/* Chỉ giữ nút bút; bỏ thanh KG, ô nhập và nút GHI khỏi giao diện. */
+.soghi-entry-dock {
+  position:fixed;
+  z-index:31;
+  left:auto;
+  right:18px;
+  bottom:calc(18px + env(safe-area-inset-bottom, 0px));
+  display:block;
+  width:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+.soghi-entry-dock[hidden] { display:none !important; }
+.soghi-pencil-button {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:64px;
+  height:64px;
+  border:0;
+  border-radius:20px;
+  background:var(--green-2);
+  color:#fff;
+  font-size:31px;
+  line-height:1;
+  box-shadow:0 5px 15px rgba(24,91,48,.22);
+}
+.soghi-pencil-button[aria-expanded="true"] {
+  background:#155d34;
+  color:#fff;
+}
+
+.soghi-kg-display {
+  width:min(100%,560px);
+  margin:0 auto 9px;
+  padding:8px 12px;
+  min-height:42px;
+  border-radius:10px;
+  background:#fff;
+  color:#244b32;
+  text-align:right;
+  font-family:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive;
+  font-size:22px;
+  font-weight:700;
+}
+
+/* Lật trang kiểu flashcard khi chuyển ngày */
+.book-paper {
+  transform-style:preserve-3d;
+  perspective:1100px;
+  backface-visibility:hidden;
+  transform-origin:center center;
+  will-change:transform, opacity;
+}
+.book-paper.flip-out-next {
+  animation:soghiFlipOutNext .19s ease-in both;
+}
+.book-paper.flip-out-prev {
+  animation:soghiFlipOutPrev .19s ease-in both;
+}
+.book-paper.flip-in-next {
+  animation:soghiFlipInNext .38s cubic-bezier(.2,.72,.25,1) both;
+}
+.book-paper.flip-in-prev {
+  animation:soghiFlipInPrev .38s cubic-bezier(.2,.72,.25,1) both;
+}
+@keyframes soghiFlipOutNext {
+  from { transform:perspective(1100px) rotateY(0); opacity:1; }
+  to { transform:perspective(1100px) rotateY(-78deg) scale(.96); opacity:.15; }
+}
+@keyframes soghiFlipOutPrev {
+  from { transform:perspective(1100px) rotateY(0); opacity:1; }
+  to { transform:perspective(1100px) rotateY(78deg) scale(.96); opacity:.15; }
+}
+@keyframes soghiFlipInNext {
+  from { transform:perspective(1100px) rotateY(78deg) scale(.96); opacity:.15; }
+  to { transform:perspective(1100px) rotateY(0) scale(1); opacity:1; }
+}
+@keyframes soghiFlipInPrev {
+  from { transform:perspective(1100px) rotateY(-78deg) scale(.96); opacity:.15; }
+  to { transform:perspective(1100px) rotateY(0) scale(1); opacity:1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .book-paper.flip-out-next, .book-paper.flip-out-prev,
+  .book-paper.flip-in-next, .book-paper.flip-in-prev { animation-duration:.01ms; }
+}
