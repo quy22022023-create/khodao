@@ -14,8 +14,7 @@
   const toastNode = $("#soghi-toast");
   const importInput = $("#soghi-import-file");
   const entryDock = $("#soghi-entry-dock");
-  const entryInput = $("#soghi-entry-value");
-  const entrySubmit = $("#soghi-entry-submit");
+  let virtualKgValue = "";
   const keyboardToggle = $("#soghi-keyboard-toggle");
   const virtualKeyboard = $("#soghi-virtual-keyboard");
 
@@ -357,7 +356,7 @@
       state.currentHarvesterId = node.dataset.openPerson;
       state.currentDate = todayISO();
       state.editingEntryId = null;
-      entryInput.value = "";
+      virtualKgValue = "";
       showEntryDock(false);
       renderBook();
     }));
@@ -415,6 +414,36 @@
     showToast("Đã xóa người hái và toàn bộ lịch sử.");
   }
 
+  let dateFlipBusy = false;
+  async function flipToDate(direction) {
+    if (dateFlipBusy) return;
+    dateFlipBusy = true;
+    const paper = $("#book-paper");
+    if (!paper) {
+      state.currentDate = shiftDate(state.currentDate, direction);
+      await renderBook();
+      dateFlipBusy = false;
+      return;
+    }
+    paper.classList.remove("flip-in-next", "flip-in-prev");
+    paper.classList.add(direction > 0 ? "flip-out-next" : "flip-out-prev");
+    await new Promise(resolve => setTimeout(resolve, 190));
+    state.currentDate = shiftDate(state.currentDate, direction);
+    await renderBook();
+    const newPaper = $("#book-paper");
+    if (newPaper) {
+      newPaper.classList.add(direction > 0 ? "flip-in-next" : "flip-in-prev");
+      newPaper.addEventListener("animationend", () => {
+        newPaper.classList.remove("flip-in-next", "flip-in-prev");
+        dateFlipBusy = false;
+      }, { once: true });
+      // Fallback if animationend is not fired by the browser.
+      setTimeout(() => { dateFlipBusy = false; }, 500);
+    } else {
+      dateFlipBusy = false;
+    }
+  }
+
   async function renderBook() {
     state.screen = "book";
     const person = await getOne("harvesters", state.currentHarvesterId);
@@ -469,25 +498,26 @@
     $("#book-date").addEventListener("change", event => {
       if (event.target.value) { state.currentDate = event.target.value; renderBook(); }
     });
-    $("#previous-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, -1); renderBook(); });
-    $("#next-day").addEventListener("click", () => { state.currentDate = shiftDate(state.currentDate, 1); renderBook(); });
+    $("#previous-day").addEventListener("click", () => flipToDate(-1));
+    $("#next-day").addEventListener("click", () => flipToDate(1));
     app.querySelectorAll("[data-entry-id]").forEach(node => node.addEventListener("click", async () => {
       const entry = await getOne("entries", node.dataset.entryId);
       if (!entry || entry.accountId !== state.account.id) return;
       state.editingEntryId = entry.id;
       showEntryDock(true);
-      entryInput.value = String(entry.kg).replace(".", ",");
-      entrySubmit.textContent = "SỬA";
+      virtualKgValue = String(entry.kg).replace(".", ",");
+      showKgDisplay();
+      state.editingEntryId = entry.id;
     }));
     app.querySelectorAll("[data-add-entry]").forEach(node => node.addEventListener("click", () => {
       state.editingEntryId = null;
       state.editingEntryId = null;
-      entryInput.value = "";
+      virtualKgValue = "";
       showEntryDock(true);
     }));
     const paper = $("#book-paper");
     paper.addEventListener("touchstart", event => {
-      if (event.target.closest(".notebook-grid-wrap")) return;
+      if (event.target.closest("button, input, select, a")) return;
       const touch = event.changedTouches[0];
       state.swipeStart = { x: touch.clientX, y: touch.clientY };
     }, { passive: true });
@@ -497,9 +527,8 @@
       const dx = touch.clientX - state.swipeStart.x;
       const dy = touch.clientY - state.swipeStart.y;
       state.swipeStart = null;
-      if (Math.abs(dx) > 75 && Math.abs(dy) < 55) {
-        state.currentDate = shiftDate(state.currentDate, dx < 0 ? 1 : -1);
-        renderBook();
+      if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        flipToDate(dx < 0 ? 1 : -1);
       }
     }, { passive: true });
   }
@@ -507,7 +536,6 @@
   function showEntryDock(openKeyboard = false) {
     entryDock.hidden = false;
     document.body.classList.add("entry-active");
-    if (!state.editingEntryId) entrySubmit.textContent = "GHI";
     if (openKeyboard) setVirtualKeyboard(true);
   }
   function setVirtualKeyboard(open) {
@@ -516,8 +544,7 @@
     keyboardToggle.setAttribute("aria-label", open ? "Đóng bàn phím nhập kg" : "Mở bàn phím nhập kg");
     document.body.classList.toggle("keyboard-open", open);
     if (open) {
-      // Keep focus away from the operating-system keyboard; all digits come from web keys.
-      entryInput.blur();
+      // Custom keypad only; no native input or operating-system keyboard is used.
     }
   }
   function hideEntryDock() {
@@ -526,11 +553,14 @@
     virtualKeyboard.hidden = true;
     keyboardToggle.setAttribute("aria-expanded", "false");
     state.editingEntryId = null;
-    entryInput.value = "";
-    entrySubmit.textContent = "GHI";
+    virtualKgValue = "";
+  }
+  function showKgDisplay() {
+    const display = $("#soghi-kg-display");
+    if (display) display.textContent = virtualKgValue || "Chưa nhập";
   }
   function appendVirtualKey(key) {
-    let value = entryInput.value || "";
+    let value = virtualKgValue || "";
     if (key === "backspace") {
       value = value.slice(0, -1);
     } else if (key === "decimal") {
@@ -538,27 +568,27 @@
     } else if (/^\d$/.test(key)) {
       if (value.length < 9) value += key;
     }
-    entryInput.value = value;
+    virtualKgValue = value;
+    const display = $("#soghi-kg-display");
+    if (display) display.textContent = value || "Chưa nhập";
   }
   keyboardToggle.addEventListener("click", () => {
     setVirtualKeyboard(virtualKeyboard.hidden);
   });
-  entryInput.addEventListener("click", () => setVirtualKeyboard(true));
   virtualKeyboard.querySelectorAll("[data-key]").forEach(button => {
     button.addEventListener("click", async () => {
       const key = button.dataset.key;
       if (key === "enter") {
-        entryDock.requestSubmit();
+        submitVirtualKg();
       } else {
         appendVirtualKey(key);
       }
     });
   });
 
-  entryDock.addEventListener("submit", async event => {
-    event.preventDefault();
+  async function submitVirtualKg() {
     if (!state.account || !state.currentHarvesterId || state.screen !== "book") return;
-    const kg = parseKg(entryInput.value);
+    const kg = parseKg(virtualKgValue);
     if (kg === null) {
       showToast("Nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
       setVirtualKeyboard(true);
@@ -572,7 +602,6 @@
         entry.updatedAt = new Date().toISOString();
         await put("entries", entry);
         state.editingEntryId = null;
-        entrySubmit.textContent = "GHI";
         showToast("Đã sửa số kg.");
       } else {
         await put("entries", {
@@ -581,15 +610,16 @@
         });
         showToast("Đã ghi " + formatNumber(kg) + " kg.");
       }
-      entryInput.value = "";
-      // Re-render the book only; keep the custom web keypad open for the next weighing.
+      virtualKgValue = "";
+      const display = $("#soghi-kg-display");
+      if (display) display.textContent = "Chưa nhập";
       await renderBook();
       setVirtualKeyboard(true);
     } catch (error) {
       showToast(error.message || "Không thể lưu số kg.");
       setVirtualKeyboard(true);
     }
-  });
+  }
 
   function parseKg(value) {
     const normalized = String(value ?? "").trim().replace(",", ".");
