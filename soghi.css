@@ -232,3 +232,76 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 body.entry-active .book-wrap { padding-bottom:145px; }
 body.entry-active .soghi-toast { bottom:calc(78px + env(safe-area-inset-bottom)); }
+
+/* Bàn phím số ảo riêng của ứng dụng */
+.soghi-entry-dock {
+  z-index:30;
+  padding:8px 11px calc(8px + env(safe-area-inset-bottom, 0px));
+  gap:8px;
+}
+.soghi-pencil-button {
+  flex:0 0 44px;
+  width:44px;
+  height:46px;
+  border:0;
+  border-radius:12px;
+  background:#e8f1e8;
+  color:var(--green);
+  font-size:24px;
+  font-weight:800;
+}
+.soghi-pencil-button[aria-expanded="true"] {
+  background:var(--green);
+  color:white;
+}
+.soghi-entry-dock input {
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.soghi-virtual-keyboard {
+  position:fixed;
+  z-index:29;
+  left:0;
+  right:0;
+  bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+  padding:10px 12px 12px;
+  background:#d9dde3;
+  border-top:1px solid #c3cad1;
+  box-shadow:0 -7px 22px rgba(25,40,30,.13);
+}
+.soghi-virtual-keyboard[hidden] { display:none !important; }
+.soghi-keyboard-grid {
+  width:min(100%, 560px);
+  margin:0 auto;
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:7px;
+}
+.soghi-keyboard-grid button {
+  height:clamp(48px, 8vh, 66px);
+  border:0;
+  border-radius:12px;
+  background:#fff;
+  color:#17231b;
+  font-size:clamp(23px, 5vw, 30px);
+  font-weight:600;
+  box-shadow:0 1px 1px rgba(0,0,0,.05);
+  touch-action:manipulation;
+}
+.soghi-keyboard-grid button:active { background:#e8f1e8; transform:scale(.98); }
+.soghi-keyboard-grid .key-function { background:#eef1f3; color:#405247; }
+.soghi-keyboard-grid .key-enter {
+  grid-column:1 / -1;
+  height:48px;
+  background:var(--green-2);
+  color:white;
+  font-size:16px;
+  letter-spacing:.7px;
+}
+body.entry-active .book-wrap { padding-bottom:calc(360px + env(safe-area-inset-bottom, 0px)); }
+body.entry-active.keyboard-open .book-wrap { padding-bottom:calc(390px + env(safe-area-inset-bottom, 0px)); }
+@media (max-height:700px) {
+  .soghi-keyboard-grid button { height:44px; }
+  .soghi-keyboard-grid .key-enter { height:42px; }
+}
