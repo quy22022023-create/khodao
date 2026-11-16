@@ -16,6 +16,8 @@
   const entryDock = $("#soghi-entry-dock");
   const entryInput = $("#soghi-entry-value");
   const entrySubmit = $("#soghi-entry-submit");
+  const keyboardToggle = $("#soghi-keyboard-toggle");
+  const virtualKeyboard = $("#soghi-virtual-keyboard");
 
   const state = {
     db: null,
@@ -355,10 +357,8 @@
       state.currentHarvesterId = node.dataset.openPerson;
       state.currentDate = todayISO();
       state.editingEntryId = null;
-      showEntryDock(true);
-      // Keep this focus call synchronous in the original tap handler for iOS Safari.
       entryInput.value = "";
-      entryInput.focus({ preventScroll: true });
+      showEntryDock(false);
       renderBook();
     }));
     app.querySelectorAll("[data-edit-person]").forEach(node => node.addEventListener("click", () => editPerson(node.dataset.editPerson)));
@@ -476,16 +476,14 @@
       if (!entry || entry.accountId !== state.account.id) return;
       state.editingEntryId = entry.id;
       showEntryDock(true);
-      entryInput.value = String(entry.kg);
-      entryInput.focus({ preventScroll: true });
-      entryInput.select();
+      entryInput.value = String(entry.kg).replace(".", ",");
       entrySubmit.textContent = "SỬA";
     }));
     app.querySelectorAll("[data-add-entry]").forEach(node => node.addEventListener("click", () => {
       state.editingEntryId = null;
-      showEntryDock(true);
+      state.editingEntryId = null;
       entryInput.value = "";
-      entryInput.focus({ preventScroll: true });
+      showEntryDock(true);
     }));
     const paper = $("#book-paper");
     paper.addEventListener("touchstart", event => {
@@ -506,24 +504,56 @@
     }, { passive: true });
   }
 
-  function showEntryDock(focus = false) {
+  function showEntryDock(openKeyboard = false) {
     entryDock.hidden = false;
     document.body.classList.add("entry-active");
     if (!state.editingEntryId) entrySubmit.textContent = "GHI";
-    if (focus) {
-      // Called from a real tap where possible; the persistent input is not replaced
-      // when the book screen re-renders, so the keyboard can remain open.
-      entryInput.focus({ preventScroll: true });
+    if (openKeyboard) setVirtualKeyboard(true);
+  }
+  function setVirtualKeyboard(open) {
+    virtualKeyboard.hidden = !open;
+    keyboardToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    keyboardToggle.setAttribute("aria-label", open ? "Đóng bàn phím nhập kg" : "Mở bàn phím nhập kg");
+    document.body.classList.toggle("keyboard-open", open);
+    if (open) {
+      // Keep focus away from the operating-system keyboard; all digits come from web keys.
+      entryInput.blur();
     }
   }
   function hideEntryDock() {
     entryDock.hidden = true;
-    document.body.classList.remove("entry-active");
+    document.body.classList.remove("entry-active", "keyboard-open");
+    virtualKeyboard.hidden = true;
+    keyboardToggle.setAttribute("aria-expanded", "false");
     state.editingEntryId = null;
     entryInput.value = "";
-    entryInput.blur();
     entrySubmit.textContent = "GHI";
   }
+  function appendVirtualKey(key) {
+    let value = entryInput.value || "";
+    if (key === "backspace") {
+      value = value.slice(0, -1);
+    } else if (key === "decimal") {
+      if (!value.includes(",") && !value.includes(".")) value = value ? value + "," : "0,";
+    } else if (/^\d$/.test(key)) {
+      if (value.length < 9) value += key;
+    }
+    entryInput.value = value;
+  }
+  keyboardToggle.addEventListener("click", () => {
+    setVirtualKeyboard(virtualKeyboard.hidden);
+  });
+  entryInput.addEventListener("click", () => setVirtualKeyboard(true));
+  virtualKeyboard.querySelectorAll("[data-key]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const key = button.dataset.key;
+      if (key === "enter") {
+        entryDock.requestSubmit();
+      } else {
+        appendVirtualKey(key);
+      }
+    });
+  });
 
   entryDock.addEventListener("submit", async event => {
     event.preventDefault();
@@ -531,7 +561,7 @@
     const kg = parseKg(entryInput.value);
     if (kg === null) {
       showToast("Nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
-      entryInput.focus({ preventScroll: true });
+      setVirtualKeyboard(true);
       return;
     }
     try {
@@ -552,12 +582,12 @@
         showToast("Đã ghi " + formatNumber(kg) + " kg.");
       }
       entryInput.value = "";
-      // Re-render only the book area; the persistent dock/input stays mounted and focused.
+      // Re-render the book only; keep the custom web keypad open for the next weighing.
       await renderBook();
-      entryInput.focus({ preventScroll: true });
+      setVirtualKeyboard(true);
     } catch (error) {
       showToast(error.message || "Không thể lưu số kg.");
-      entryInput.focus({ preventScroll: true });
+      setVirtualKeyboard(true);
     }
   });
 
