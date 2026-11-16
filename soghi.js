@@ -2,7 +2,7 @@
   "use strict";
 
   const DB_NAME = "soghi_local_demo_v1";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const Ledger = globalThis.SoghiLedger;
   const STORE_NAMES = { harvesters: "harvesters", entries: "entries", rates: "soghi_rates", advances: "soghi_advances", settlements: "soghi_settlements" };
   const SESSION_KEY = "soghi_demo_session";
@@ -147,6 +147,7 @@
             store.createIndex("accountId", "accountId", { unique: false });
           }
         }
+        if (!db.objectStoreNames.contains("soghi_sync_state")) db.createObjectStore("soghi_sync_state", { keyPath: "accountId" });
       };
       request.onblocked = () => showToast("Đóng tab Sổ Ghi cũ để hoàn tất cập nhật dữ liệu.");
       request.onsuccess = () => {
@@ -159,11 +160,13 @@
   }
   function storeRequest(storeName, mode, action) {
     return new Promise((resolve, reject) => {
-      const tx = state.db.transaction(storeName, mode);
+      const changed = mode === "readwrite" && (Object.values(STORE_NAMES).includes(storeName) || storeName === "settings") && state.account;
+      const tx = state.db.transaction(changed ? [storeName, "soghi_sync_state"] : storeName, mode);
+      if (changed) markDirty(tx, state.account.id);
       const store = tx.objectStore(storeName);
       let request;
       try { request = action(store); } catch (err) { reject(err); return; }
-      tx.oncomplete = () => resolve(request?.result);
+      tx.oncomplete = () => { resolve(request?.result); if (changed) cloud.schedule(); };
       tx.onerror = () => reject(tx.error || request?.error);
       tx.onabort = () => reject(tx.error || new Error("Giao dịch dữ liệu bị hủy."));
     });
@@ -171,11 +174,23 @@
   const getAll = name => storeRequest(name, "readonly", store => store.getAll());
   const put = (name, value) => storeRequest(name, "readwrite", store => store.put(value));
   const getOne = (name, key) => storeRequest(name, "readonly", store => store.get(key));
-  function transaction(names, mode, action) {
+  function markDirty(tx, accountId, options = {}) {
+    const store = tx.objectStore("soghi_sync_state"), req = store.get(accountId);
+    req.onsuccess = () => {
+      if (!req.result) return;
+      const next = { ...req.result, counter: req.result.counter + 1 };
+      if (options.restore) Object.assign(next, { restore: true, restoreRevision: req.result.revision, restoreId: randomId() });
+      store.put(next);
+    };
+  }
+  function transaction(names, mode, action, options = {}) {
     return new Promise((resolve, reject) => {
-      const tx = state.db.transaction(names, mode);
+      const changed = !options.silent && mode === "readwrite" && names.some(n => Object.values(STORE_NAMES).includes(n) || n === "settings") && state.account;
+      const stores = [...new Set(changed ? [...names, "soghi_sync_state"] : names)];
+      const tx = state.db.transaction(stores, mode);
+      if (changed) markDirty(tx, state.account.id, options);
       let value, problem;
-      tx.oncomplete = () => resolve(value);
+      tx.oncomplete = () => { resolve(value); if (changed) cloud.schedule(); };
       tx.onabort = tx.onerror = () => reject(problem || tx.error || new Error("Giao dịch dữ liệu bị hủy."));
       const request = req => new Promise((yes, no) => { req.onsuccess = () => yes(req.result); req.onerror = () => no(req.error); });
       Promise.resolve().then(() => action(tx, request)).then(result => { value = result; }).catch(error => {
@@ -191,6 +206,51 @@
   }
   async function getAccountData(accountId = state.account.id) {
     return transaction(Object.values(STORE_NAMES), "readonly", (tx, request) => readData(tx, request, accountId));
+  }
+  async function readCloudBundle(accountId) {
+    return transaction([...Object.values(STORE_NAMES), "settings", "soghi_sync_state"], "readonly", async (tx, request) => {
+      const [data, settings, meta] = await Promise.all([readData(tx, request, accountId), request(tx.objectStore("settings").get(accountId)), request(tx.objectStore("soghi_sync_state").get(accountId))]);
+      return { data: SoghiSync.mapIds({ ...data, settings }, meta?.idMap, true), meta };
+    });
+  }
+  async function updateCloudMeta(accountId, change) {
+    return transaction(["soghi_sync_state"], "readwrite", async (tx, request) => {
+      const old = await request(tx.objectStore("soghi_sync_state").get(accountId));
+      const next = change(old);
+      if (next) tx.objectStore("soghi_sync_state").put(next);
+    }, { silent: true });
+  }
+  async function applyCloudSnapshot(accountId, incoming, expectedLocal, patch, choice, syncRequest) {
+    await transaction([...Object.values(STORE_NAMES), "settings", "soghi_sync_state"], "readwrite", async (tx, request) => {
+      const [all, settings, meta] = await Promise.all([
+        Promise.all(Object.entries(STORE_NAMES).map(async ([key, store]) => [key, await request(tx.objectStore(store).getAll())])).then(Object.fromEntries),
+        request(tx.objectStore("settings").get(accountId)), request(tx.objectStore("soghi_sync_state").get(accountId))
+      ]);
+      if (!meta) throw new Error("Phiên đồng bộ đã thay đổi.");
+      const data = Object.fromEntries(Object.entries(all).map(([key, rows]) => [key, rows.filter(r => r.accountId === accountId)]));
+      const current = SoghiSync.mapIds({ ...data, settings }, meta.idMap, true);
+      const result = SoghiSync.merge(expectedLocal, current, incoming, choice);
+      if (result.conflicts.length) throw new SoghiSync.SyncError("Có thay đổi mới trong lúc đồng bộ. Dữ liệu vẫn được giữ lại.", "CONFLICT", result.conflicts);
+      const maps = structuredClone(meta.idMap || {});
+      for (const key of Object.keys(STORE_NAMES)) {
+        maps[key] ||= {};
+        const otherIds = new Set(all[key].filter(r => r.accountId !== accountId).map(r => r.id));
+        const targets = new Set([...all[key].map(r => r.id), ...Object.values(maps[key])]);
+        for (const row of result.data[key]) {
+          let target = Object.hasOwn(maps[key], row.id) ? maps[key][row.id] : row.id;
+          if (otherIds.has(target)) { do { target = randomId(); } while (targets.has(target)); Object.defineProperty(maps[key], row.id, { value: target, enumerable: true, writable: true, configurable: true }); targets.add(target); }
+        }
+      }
+      const local = SoghiSync.mapIds(result.data, maps);
+      for (const [key, store] of Object.entries(STORE_NAMES)) {
+        for (const old of data[key]) tx.objectStore(store).delete(old.id);
+        for (const row of local[key]) tx.objectStore(store).put({ ...row, accountId });
+      }
+      tx.objectStore("settings").put({ ...local.settings, accountId });
+      const next = { ...meta, ...patch, idMap: maps, ackCounter: Math.max(meta.ackCounter, patch.ackCounter) };
+      if (syncRequest.replace && (!meta.restoreId || meta.restoreId === syncRequest.restoreId)) Object.assign(next, { restore: false, restoreId: null, restoreRevision: null });
+      tx.objectStore("soghi_sync_state").put(next);
+    }, { silent: true });
   }
   async function saveSettings() {
     await put("settings", { accountId: state.account.id, ...state.settings });
@@ -241,6 +301,11 @@
   });
 
   function connectionText() {
+    if (cloud.enabled) {
+      if (!navigator.onLine) return "Ngoại tuyến · Sẽ đồng bộ khi có mạng";
+      const labels = { synced: "Đã đồng bộ Supabase", syncing: "Đang đồng bộ…", pending: "Đã lưu trên máy · Chờ đồng bộ", conflict: "Cần đối chiếu dữ liệu · Mở Cài đặt", expired: "Cần đăng nhập lại để đồng bộ", unlinked: "Dữ liệu trên máy · Liên kết trong Cài đặt", error: "Chưa đồng bộ · Mở Cài đặt", offline: "Chưa tới được máy chủ · Dữ liệu lưu trên máy" };
+      return labels[cloud.status] || "Đang kiểm tra đồng bộ";
+    }
     if (!navigator.onLine) return "Ngoại tuyến · Dữ liệu lưu trên thiết bị";
     return "Đang dùng dữ liệu kiểm thử trên thiết bị";
   }
@@ -287,7 +352,7 @@
               </div>` : ""}
             <button class="primary-button" type="submit">${isRegister ? "TẠO TÀI KHOẢN" : "ĐĂNG NHẬP"}</button>
           </form>
-          <p class="auth-foot">Bản web kiểm thử lưu dữ liệu trên trình duyệt này.<br>Chưa kết nối Supabase hoặc đồng bộ nhiều thiết bị.</p>
+          <p class="auth-foot">${cloud.enabled ? "Đăng nhập Supabase bằng username và PIN.<br>Thiết bị đã đăng nhập vẫn ghi được khi mất mạng." : "Dữ liệu lưu trên trình duyệt này.<br>Điền URL/key trong config để kết nối Supabase."}</p>
         </section>
       </main>`;
     app.querySelectorAll("[data-auth-mode]").forEach(button => {
@@ -310,6 +375,28 @@
       const pin = String(data.get("pin") || "");
       if (!usernameKey) return showToast("Vui lòng nhập Username.");
       if (!/^\d{6}$/.test(pin)) return showToast("Mã PIN phải gồm đúng 6 chữ số.");
+      if (cloud.enabled) {
+        const existing = (await getAll("accounts")).find(a => a.usernameKey === usernameKey);
+        const localPinOK = existing ? (await hashPin(pin, existing.pinSalt)).hash === existing.pinHash : false;
+        const cached = existing && (await readCloudBundle(existing.id)).meta?.remoteId;
+        try {
+          if (isRegister && existing) throw new Error("Username đã có dữ liệu trên máy. Hãy dùng Đăng nhập để liên kết, không tạo lại tài khoản.");
+          if (isRegister && String(data.get("pinConfirm")) !== pin) throw new Error("Hai mã PIN không khớp.");
+          const auth = await cloud.authenticate({ username, pin, displayName: isRegister ? String(data.get("displayName") || "").trim() : existing?.displayName || username, register: isRegister, migrate: !isRegister && !!localPinOK });
+          if (existing && !localPinOK) throw new Error("PIN cloud khác PIN của dữ liệu cục bộ cùng username. Hãy sao lưu dữ liệu cục bộ trước khi chuyển tài khoản; chưa có dữ liệu nào bị thay thế.");
+          const hashed = await hashPin(pin), now = new Date().toISOString();
+          const account = { ...existing, id: existing?.id || auth.account.id, ...auth.account, usernameKey,
+            pinHash: hashed.hash, pinSalt: hashed.salt, createdAt: existing?.createdAt || now, updatedAt: now };
+          // ID cục bộ cũ được giữ nguyên khi liên kết để không làm mất các sổ hiện có.
+          account.id = existing?.id || auth.account.id;
+          await put("accounts", account); await loginAccount(account, auth);
+        } catch (error) {
+          if (error.code === "NETWORK" && !isRegister && localPinOK && cached) {
+            await loginAccount(existing); showToast("Đăng nhập dữ liệu đã lưu trên máy. Sẽ đồng bộ khi có mạng.");
+          } else throw error;
+        }
+        return;
+      }
       if (isRegister) {
         const displayName = String(data.get("displayName") || "").trim();
         const pinConfirm = String(data.get("pinConfirm") || "");
@@ -339,14 +426,16 @@
     }));
   }
 
-  async function loginAccount(account) {
+  async function loginAccount(account, auth) {
     state.account = account;
     localStorage.setItem(SESSION_KEY, account.id);
     await loadSettings();
     await renderHome();
+    if (cloud.enabled) await cloud.attach(account, auth);
   }
-  function logout() {
+  async function logout() {
     if (state.saving) return showToast("Đang lưu dữ liệu, vui lòng chờ.");
+    if (cloud.enabled) await cloud.logout();
     localStorage.removeItem(SESSION_KEY);
     state.account = null;
     state.currentHarvesterId = null;
@@ -385,6 +474,8 @@
         <strong>${query ? "Không tìm thấy người hái" : "Chưa có người hái nào"}</strong>
         ${query ? "Thử tìm bằng tên khác." : "Nhấn dấu cộng để thêm người đầu tiên."}
       </div>`;
+    const searchInput = $("#person-search"), keepSearchFocus = document.activeElement === searchInput && !!searchInput;
+    const searchCaret = keepSearchFocus ? searchInput.selectionStart : null;
     parkEntryDock();
     app.innerHTML = `
       <header class="topbar">
@@ -412,6 +503,11 @@
       $("#person-search-empty").hidden = !rows.length || rows.some(row => !row.hidden);
     }
     filterPeople();
+    if (keepSearchFocus) {
+      const input = $("#person-search");
+      input.focus({ preventScroll: true });
+      if (searchCaret !== null) input.setSelectionRange(searchCaret, searchCaret);
+    }
     $("#person-search").addEventListener("input", event => { state.search = event.target.value; filterPeople(); });
     $("#add-person-top").addEventListener("click", openAddPerson);
     $("#add-person-fab").addEventListener("click", openAddPerson);
@@ -875,6 +971,10 @@
   }
   async function openSettlement(harvesterId) {
     const accountId = state.account.id;
+    if (cloud.enabled) {
+      if (!cloud.linked || cloud.status === "expired") return openCloudAccess();
+      await cloud.flush();
+    }
     let preview = null;
     showModal("Kết sổ tính tiền", `
       <div class="form-field"><label for="settlement-mode">Phạm vi</label><select name="mode" id="settlement-mode"><option value="range">Theo khoảng ngày</option><option value="all">Toàn bộ chưa kết toán</option></select></div>
@@ -892,6 +992,14 @@
       }
       const expected = JSON.stringify(preview);
       try {
+        if (cloud.enabled) {
+          await cloud.flush();
+          const latest = Ledger.buildSettlement(await getAccountData(accountId), harvesterId, selection);
+          if (JSON.stringify(latest) !== expected) throw new Error("Dữ liệu vừa thay đổi. Hãy tính lại trước khi kết sổ.");
+          await cloud.settle(selection, harvesterId);
+          showToast("Đã kết sổ trên Supabase và lưu lịch sử.");
+          return;
+        }
         await transaction(Object.values(STORE_NAMES), "readwrite", async (tx, request) => {
           const data = await readData(tx, request, accountId);
           const latest = Ledger.buildSettlement(data, harvesterId, selection);
@@ -942,6 +1050,43 @@
     }));
   }
 
+  async function openCloudAccess() {
+    if (!cloud.enabled) return showToast("Điền Project URL và publishable/anon key trong soghi-config.js để bật Supabase.");
+    const account = state.account;
+    showModal("Liên kết Supabase", `<p class="form-hint">Username: <strong>${escapeHTML(account.username)}</strong>. Nhập PIN để liên kết sổ đang có với tài khoản trên máy chủ. Dữ liệu trên máy được giữ lại và ghép khi đồng bộ.</p><div class="form-field"><label for="cloud-pin">PIN 6 chữ số</label><input id="cloud-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="current-password"></div>`, standardActions("Liên kết"), async form => {
+      const pin = String(form.get("pin") || "");
+      if ((await hashPin(pin, account.pinSalt)).hash !== account.pinHash) throw new Error("PIN cục bộ không đúng.");
+      const auth = await cloud.authenticate({ username: account.username, displayName: account.displayName, pin, migrate: true });
+      await cloud.attach(account, auth); await cloud.flush(); showToast("Đã liên kết và đồng bộ Supabase.");
+    });
+    modalCancel();
+  }
+  async function openCloudPanel() {
+    if (!cloud.linked || cloud.status === "expired") return openCloudAccess();
+    const labels = { harvesters: "Người hái", entries: "Số kg", rates: "Đơn giá", advances: "Ứng tiền", settlements: "Kết sổ", settings: "Giao diện", restore: "Bản khôi phục" };
+    function describe(row) {
+      if (!row) return "Đã xóa";
+      if (row.name) return row.name;
+      if (row.kg !== undefined) return `${formatNumber(row.kg)} kg · ${dateLabel(row.date)}`;
+      if (row.amount !== undefined) return `${money(row.amount)} · ${dateLabel(row.date || row.effectiveDate)}`;
+      if (row.gross !== undefined) return `${row.personName} · ${money(row.gross)}`;
+      return row.theme || "Toàn bộ dữ liệu";
+    }
+    const hasConflict = cloud.status === "conflict";
+    showModal("Đồng bộ Supabase", `<p class="form-hint">${escapeHTML(connectionText())}</p>${cloud.error ? `<p class="form-hint">${escapeHTML(cloud.error)}</p>` : ""}
+      ${hasConflict ? `<p class="form-hint">Sao lưu JSON trước khi chọn bản dữ liệu. Những số đã kết sổ trên cloud được giữ theo bản đã chốt.</p><div class="ledger-list">${cloud.conflicts.slice(0,20).map(c => `<div class="ledger-item"><div><strong>${labels[c.collection] || "Dữ liệu"}</strong><small>Thiết bị: ${escapeHTML(describe(c.local))}</small><small>Cloud: ${escapeHTML(describe(c.remote))}</small></div></div>`).join("")}</div>` : ""}
+      <div class="settings-list"><button type="button" id="cloud-backup"><span>Sao lưu JSON trước khi đối chiếu</span><span>↓</span></button>
+      ${hasConflict ? `<button type="button" id="cloud-use-remote"><span>Dùng bản cloud cho các mục xung đột</span><span>↑</span></button>${cloud.conflicts.some(c => c.locked) ? "" : `<button type="button" id="cloud-use-local"><span>Giữ thay đổi của thiết bị</span><span>↑</span></button>`}` : ""}</div>`, standardActions("Đồng bộ ngay"), async () => {
+      await cloud.flush(); showToast("Đã đồng bộ Supabase.");
+    });
+    modalCancel();
+    $("#cloud-backup").addEventListener("click", run(exportBackup));
+    for (const [id, choice] of [["cloud-use-remote", "remote"], ["cloud-use-local", "local"]]) $("#" + id)?.addEventListener("click", run(async () => {
+      if (!window.confirm("Áp dụng lựa chọn cho các mục xung đột đã hiển thị?")) return;
+      await cloud.resolve(choice); closeModal(); showToast("Đã đối chiếu và đồng bộ.");
+    }));
+  }
+
   async function openSettings() {
     const body = `
       <div class="form-field"><label for="theme-choice">Màu giao diện</label>
@@ -951,13 +1096,14 @@
         </select>
       </div>
       <div class="settings-list">
+        ${cloud.enabled ? `<button type="button" id="manage-sync"><span>Đồng bộ Supabase</span><span>↻</span></button>` : ""}
         <button type="button" id="manage-rates"><span>Đơn giá công hái theo ngày</span><span>₫</span></button>
         <button type="button" id="backup-json"><span>Sao lưu dữ liệu (JSON)</span><span>↓</span></button>
         <button type="button" id="restore-json"><span>Khôi phục dữ liệu (JSON)</span><span>↑</span></button>
         <button type="button" id="export-csv"><span>Xuất Excel (CSV)</span><span>↗</span></button>
         <button type="button" id="logout-button"><span>Đăng xuất</span><span>→</span></button>
       </div>
-      <p class="form-hint" style="margin-top:12px">Bản kiểm thử hiện lưu trên trình duyệt này. Chưa đồng bộ Supabase và chưa chia sẻ dữ liệu giữa các thiết bị.</p>
+      <p class="form-hint" style="margin-top:12px">${escapeHTML(connectionText())}</p>
     `;
     showModal("Cài đặt", body,
       `<button type="button" class="secondary-button" data-cancel>Đóng</button><button type="submit" class="primary-button">Lưu giao diện</button>`,
@@ -970,13 +1116,14 @@
       });
     $("[data-cancel]").addEventListener("click", closeModal);
     $("#manage-rates").addEventListener("click", run(() => openRates()));
+    $("#manage-sync")?.addEventListener("click", run(openCloudPanel));
     $("#backup-json").addEventListener("click", run(exportBackup));
     $("#restore-json").addEventListener("click", () => { closeModal(); importInput.click(); });
     $("#export-csv").addEventListener("click", run(exportCSV));
-    $("#logout-button").addEventListener("click", () => {
+    $("#logout-button").addEventListener("click", run(async () => {
       closeModal();
-      if (window.confirm("Đăng xuất khỏi tài khoản kiểm thử này?")) logout();
-    });
+      if (window.confirm("Đăng xuất khỏi tài khoản này? Các thay đổi chưa đồng bộ vẫn được giữ trên thiết bị.")) await logout();
+    }));
   }
 
   function downloadFile(filename, content, type) {
@@ -1015,12 +1162,18 @@
     downloadFile(`soghi-san-luong-${todayISO()}.csv`, csvText(rows), "text/csv;charset=utf-8");
     showToast("Đã xuất sản lượng CSV.");
   }
+  let importBusy = false;
   importInput.addEventListener("change", run(async event => {
     const file = event.target.files?.[0];
-    if (!file || !state.account) return;
+    if (!file || !state.account || importBusy) return;
+    importBusy = true;
     const accountId = state.account.id;
     try {
       const incoming = Ledger.validateBackup(JSON.parse(await file.text()));
+      if (cloud.enabled) {
+        if (!cloud.linked) throw new Error("Liên kết Supabase trước khi khôi phục ở chế độ cloud.");
+        await cloud.flush();
+      }
       if (!window.confirm("Khôi phục sẽ thay thế sản lượng, đơn giá, ứng tiền và lịch sử kết sổ của tài khoản này. Nên sao lưu dữ liệu hiện tại trước. Tiếp tục?")) return;
       if (state.account?.id !== accountId || state.saving) throw new Error("Tài khoản hoặc thao tác lưu đã thay đổi. Hãy thử lại.");
       await transaction([...Object.values(STORE_NAMES), "settings"], "readwrite", async (tx, request) => {
@@ -1049,12 +1202,14 @@
           }
         }
         tx.objectStore("settings").put({ accountId, ...incoming.settings });
-      });
+      }, { restore: cloud.enabled });
       state.drafts.clear();
       await loadSettings();
-      await renderHome(); showToast("Đã khôi phục đầy đủ dữ liệu.");
+      await renderHome();
+      if (cloud.enabled) await cloud.flush();
+      showToast("Đã khôi phục đầy đủ dữ liệu.");
     } catch (error) { showToast(error.message || "Không thể khôi phục. Dữ liệu hiện tại được giữ nguyên."); }
-    finally { importInput.value = ""; }
+    finally { importInput.value = ""; importBusy = false; }
   }));
   function refreshConnection() {
     document.querySelectorAll(".connection-pill").forEach(node => {
@@ -1063,16 +1218,26 @@
   }
   window.addEventListener("online", refreshConnection);
   window.addEventListener("offline", refreshConnection);
-  window.addEventListener("storage", event => {
+  window.addEventListener("storage", run(async event => {
     if (event.key === SESSION_KEY && event.newValue !== state.account?.id) {
+      if (cloud.enabled) await cloud.logout();
       closeModal(); hideEntryDock(); state.account = null; state.currentHarvesterId = null; renderAuth();
       showToast("Phiên đăng nhập đã đổi ở tab khác. Hãy đăng nhập lại.");
     }
-  });
+  }));
   window.addEventListener("focus", run(async () => {
     if (state.account && !state.saving && !modal.open) await updateVisibleData();
   }));
 
+  const cloud = SoghiSync.create({
+    config: window.SOGHI_CONFIG,
+    readBundle: readCloudBundle,
+    updateMeta: updateCloudMeta,
+    apply: applyCloudSnapshot,
+    validate: data => Ledger.validateBackup({ app: "soghi", version: 2, ...data }),
+    onState: refreshConnection,
+    onChange: async () => { if (state.account) { await loadSettings(); await updateVisibleData(); } }
+  });
   async function init() {
     try {
       if (!("indexedDB" in window)) throw new Error("Trình duyệt không hỗ trợ IndexedDB.");
@@ -1081,9 +1246,7 @@
       if (sessionId) {
         const account = await getOne("accounts", sessionId);
         if (account) {
-          state.account = account;
-          await loadSettings();
-          await renderHome();
+          await loginAccount(account);
         } else {
           localStorage.removeItem(SESSION_KEY);
           renderAuth();
