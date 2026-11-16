@@ -32,11 +32,29 @@
   </dialog>
 
   <form id="soghi-entry-dock" class="soghi-entry-dock" autocomplete="off" hidden>
+    <button id="soghi-keyboard-toggle" class="soghi-pencil-button" type="button" aria-label="Mở bàn phím nhập kg" aria-expanded="false">✎</button>
     <label class="soghi-entry-label" for="soghi-entry-value">KG</label>
-    <input id="soghi-entry-value" name="kg" type="number" inputmode="decimal" enterkeyhint="done"
-      min="0" step="0.01" placeholder="Nhập số kg" aria-label="Nhập số kg">
+    <input id="soghi-entry-value" name="kg" type="text" inputmode="none" autocomplete="off"
+      placeholder="Chạm bút để nhập kg" aria-label="Sản lượng kg" readonly>
     <button id="soghi-entry-submit" type="submit">GHI</button>
   </form>
+  <section id="soghi-virtual-keyboard" class="soghi-virtual-keyboard" aria-label="Bàn phím nhập số" hidden>
+    <div class="soghi-keyboard-grid">
+      <button type="button" data-key="1">1</button>
+      <button type="button" data-key="2">2</button>
+      <button type="button" data-key="3">3</button>
+      <button type="button" data-key="4">4</button>
+      <button type="button" data-key="5">5</button>
+      <button type="button" data-key="6">6</button>
+      <button type="button" data-key="7">7</button>
+      <button type="button" data-key="8">8</button>
+      <button type="button" data-key="9">9</button>
+      <button type="button" class="key-function" data-key="decimal">,</button>
+      <button type="button" data-key="0">0</button>
+      <button type="button" class="key-function" data-key="backspace" aria-label="Xóa một ký tự">⌫</button>
+      <button type="button" class="key-enter" data-key="enter">ENTER ↵</button>
+    </div>
+  </section>
   <input id="soghi-import-file" type="file" accept="application/json,.json" hidden>
   <div id="soghi-toast" class="soghi-toast" role="status" aria-live="polite"></div>
 </body>
