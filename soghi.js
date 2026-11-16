@@ -488,9 +488,9 @@
   }
   function openEntryModal() {
     showModal("Nhập số kg", `
-      <div class="form-field"><label for="entry-kg">Sản lượng (kg)</label><input id="entry-kg" name="kg" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Ví dụ: 52 hoặc 12.5" required autofocus></div>
+      <div class="form-field"><label for="entry-kg">Sản lượng (kg)</label><input id="entry-kg" class="numeric-entry" name="kg" type="number" inputmode="decimal" enterkeyhint="done" min="0" step="0.01" placeholder="Nhập số kg" required autofocus></div>
       <p class="form-hint">Số mới sẽ được thêm vào cuối danh sách của ngày ${formatDate(state.currentDate)}.</p>
-    `, `<button type="button" class="secondary-button" data-cancel>Hủy</button><button type="submit" class="primary-button">Lưu số kg</button>`, async data => {
+    `, `<button type="button" class="secondary-button" data-cancel>Hủy</button><button type="submit" class="primary-button">Ghi vào sổ</button>`, async data => {
       const kg = parseKg(data.get("kg"));
       if (kg === null) throw new Error("Vui lòng nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
       await put("entries", {
@@ -501,15 +501,19 @@
       showToast("Đã lưu số kg.");
     });
     $("[data-cancel]").addEventListener("click", closeModal);
-    $("#entry-kg").focus();
+    requestAnimationFrame(() => {
+      const input = $("#entry-kg");
+      input?.focus();
+      input?.select();
+    });
   }
   async function editEntry(id) {
     const entry = await getOne("entries", id);
     if (!entry || entry.accountId !== state.account.id) return;
     showModal("Sửa số kg", `
-      <div class="form-field"><label for="entry-kg">Sản lượng (kg)</label><input id="entry-kg" name="kg" type="number" inputmode="decimal" min="0" step="0.01" value="${escapeHTML(entry.kg)}" required></div>
+      <div class="form-field"><label for="entry-kg">Sản lượng (kg)</label><input id="entry-kg" class="numeric-entry" name="kg" type="number" inputmode="decimal" enterkeyhint="done" min="0" step="0.01" value="${escapeHTML(entry.kg)}" required></div>
       <p class="form-hint">Ngày ghi: ${formatDate(entry.date)}. Sửa số liệu không thay đổi ngày ghi.</p>
-    `, `<button type="button" class="danger-button" id="delete-entry">Xóa số</button><span style="flex:1"></span><button type="button" class="secondary-button" data-cancel>Hủy</button><button type="submit" class="primary-button">Lưu</button>`, async data => {
+    `, `<button type="button" class="danger-button" id="delete-entry">Xóa số</button><span style="flex:1"></span><button type="button" class="secondary-button" data-cancel>Hủy</button><button type="submit" class="primary-button">Ghi vào sổ</button>`, async data => {
       const kg = parseKg(data.get("kg"));
       if (kg === null) throw new Error("Vui lòng nhập số kg hợp lệ, không âm và tối đa 2 chữ số thập phân.");
       entry.kg = kg;
@@ -519,6 +523,11 @@
       showToast("Đã cập nhật số kg.");
     });
     $("[data-cancel]").addEventListener("click", closeModal);
+    requestAnimationFrame(() => {
+      const input = $("#entry-kg");
+      input?.focus();
+      input?.select();
+    });
     $("#delete-entry").addEventListener("click", async () => {
       const confirmed = window.confirm(`Xóa số ${formatNumber(entry.kg)} kg khỏi ngày ${formatDate(entry.date)}?`);
       if (!confirmed) return;
