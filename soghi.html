@@ -15,6 +15,7 @@
   <script src="soghi-config.js"></script>
   <script defer src="soghi-ledger.js"></script>
   <script defer src="soghi-sync.js"></script>
+  <script defer src="soghi-ui.js"></script>
   <script defer src="soghi.js"></script>
 </head>
 <body>
@@ -25,7 +26,13 @@
     </div>
   </div>
 
-  <dialog id="soghi-modal" class="soghi-modal">
+  <div id="soghi-picker-backdrop" class="soghi-picker-backdrop" hidden></div>
+  <section id="soghi-person-picker" class="soghi-person-picker" aria-label="Chuyển người hái" hidden>
+    <div class="person-picker-heading"><strong>Chuyển người</strong><button type="button" id="close-person-picker" aria-label="Đóng danh sách người">×</button></div>
+    <div class="person-picker-search"><input id="person-picker-search" type="search" placeholder="Tìm tên người hái…" aria-label="Tìm người để chuyển sổ" autocomplete="off"></div>
+    <div id="person-picker-list" class="person-picker-list"></div>
+  </section>
+  <dialog id="soghi-modal" class="soghi-modal" aria-labelledby="soghi-modal-title">
     <form method="dialog" id="soghi-modal-form" class="modal-card">
       <div class="modal-heading">
         <h2 id="soghi-modal-title">Thông tin</h2>
