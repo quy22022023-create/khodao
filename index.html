@@ -34,6 +34,7 @@
 </head>
 <body>
     <input type="file" id="file-input" multiple hidden onchange="importFiles(event)">
+    <input type="file" id="folder-input" webkitdirectory directory multiple hidden onchange="importFiles(event, true)">
     <input type="file" id="zip-input" accept=".zip,application/zip" hidden onchange="importZipProject(event)">
     <header class="header">
         <div class="header-top">
@@ -55,9 +56,17 @@
             <button id="project-root" class="root-row" onclick="selectRoot()">/ Dự án</button>
             <div id="file-tree" role="tree" aria-label="Cây thư mục"></div>
             <div class="project-io">
-                <button onclick="document.getElementById('file-input').click()">Nhập file</button>
-                <button onclick="document.getElementById('zip-input').click()">Nhập ZIP</button>
-                <button onclick="exportProjectZip()">Xuất ZIP</button>
+                <div class="io-buttons">
+                    <button onclick="document.getElementById('file-input').click()">Nhập file</button>
+                    <button id="btn-import-folder" onclick="openFolderPicker()">Nhập thư mục</button>
+                    <button onclick="document.getElementById('zip-input').click()">Nhập ZIP</button>
+                    <button onclick="exportProjectZip()">Xuất ZIP</button>
+                </div>
+                <p class="import-destination" id="import-destination"></p>
+                <label class="import-option"><input type="checkbox" id="import-overwrite" aria-describedby="import-help"> Cho phép ghi đè file trùng đường dẫn</label>
+                <label class="import-option"><input type="checkbox" id="import-keep-root" checked> Giữ tên thư mục gốc khi nhập thư mục</label>
+                <p class="import-help" id="import-help">Nhập file, thư mục và ZIP sẽ gộp vào vị trí đang chọn. Khi tắt ghi đè, file trùng được bỏ qua. Chỉ cập nhật bản sao trong ứng dụng.</p>
+                <p class="import-result" id="import-result" role="status" aria-live="polite" hidden></p>
             </div>
         </aside>
         <section class="editor-pane" aria-label="Soạn thảo">
