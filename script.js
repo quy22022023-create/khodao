@@ -104,7 +104,7 @@ let db;
 let revision = 0;
 let saveQueue = Promise.resolve();
 let toastTimeout;
-let zipOperationInProgress = false;
+let projectOperationInProgress = false;
 let searchTimeout;
 const documents = new Map();
 const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
@@ -239,7 +239,7 @@ function revealParents(path) {
     let parent = parentPath(path);
     while (parent) { expanded.add(parent); parent = parentPath(parent); }
 }
-function switchFile(path) {
+function switchFile(path, { persist = true } = {}) {
     if (!files[path]) return;
     saveCurrentEditorContent();
     currentFile = path;
@@ -260,7 +260,7 @@ function switchFile(path) {
     for (const button of document.querySelectorAll('.editor-toolbar button')) button.disabled = !!item.binary;
     revealParents(path);
     renderTree();
-    persistFiles();
+    if (persist) persistFiles();
     if (matchMedia('(max-width: 700px)').matches) toggleTree(false);
     requestAnimationFrame(() => editor.refresh());
 }
@@ -286,6 +286,7 @@ function renderTree() {
     const container = $('file-tree');
     container.replaceChildren();
     $('file-count').textContent = Object.keys(files).length + ' file';
+    $('import-destination').textContent = 'Nhập vào: /' + (creationBase() || ' (gốc dự án)');
     $('project-root').classList.toggle('selected', !selectedPath);
     const query = $('project-search').value.trim().toLocaleLowerCase('vi');
     if (query) { renderSearch(container, query); return; }
@@ -334,7 +335,7 @@ function renderTree() {
         target.append(list);
     };
     draw(root, container, 0);
-    if (!folders.size && !Object.keys(files).length) container.textContent = 'Dự án trống. Tạo file hoặc nhập ZIP.';
+    if (!folders.size && !Object.keys(files).length) container.textContent = 'Dự án trống. Tạo file, nhập thư mục hoặc ZIP.';
 }
 function renderSearch(container, query) {
     let count = 0;
@@ -442,32 +443,125 @@ function clearCurrentCode() {
     editor.replaceRange('', { line: 0, ch: 0 }, editor.posFromIndex(editor.getValue().length), '+delete');
     editor.focus(); showToast('Đã xóa code. Có thể Undo.');
 }
-async function importFiles(event) {
+function openFolderPicker() {
+    const input = $('folder-input');
+    if (!('webkitdirectory' in input)) {
+        return alert('Trình duyệt này chưa hỗ trợ chọn thư mục. Hãy nén thư mục thành ZIP rồi dùng Nhập ZIP.');
+    }
+    input.click();
+}
+function showImportResult(message, error = false) {
+    const result = $('import-result');
+    result.textContent = message;
+    result.classList.toggle('error', error);
+    result.hidden = false;
+}
+// Tạo bản sao để một lỗi đọc file / xung đột không làm nhập dở dang.
+async function mergeImportedEntries(entries, base, overwrite) {
+    if (entries.length > ZIP_MAX_FILE_COUNT * 2 || entries.filter(entry => !entry.directory).length > ZIP_MAX_FILE_COUNT) {
+        throw new Error('Mỗi lần nhập tối đa 300 file và 600 mục gồm file/thư mục.');
+    }
+    const nextFiles = Object.assign(Object.create(null), files);
+    const nextFolders = new Set(folders);
+    const incomingPaths = new Set();
+    const changedPaths = [];
+    let added = 0, replaced = 0, skipped = 0, total = 0;
+    for (const entry of entries) {
+        const relative = safePath(entry.path);
+        const path = safePath((base ? base + '/' : '') + relative);
+        if (incomingPaths.has(path)) throw new Error('Nguồn nhập có đường dẫn trùng: ' + path);
+        incomingPaths.add(path);
+        if (entry.directory) {
+            if (nextFiles[path]) throw new Error('File đang chiếm đường dẫn thư mục: ' + path);
+            ensureParents(path, nextFolders, nextFiles);
+            nextFolders.add(path);
+            continue;
+        }
+        if (nextFolders.has(path)) throw new Error('Thư mục đang chiếm đường dẫn file: ' + path);
+        ensureParents(path, nextFolders, nextFiles);
+        if (entry.size > ZIP_MAX_SINGLE_FILE_BYTES) throw new Error('File lớn hơn 4 MB: ' + path);
+        const bytes = await entry.read();
+        total += bytes.length;
+        if (bytes.length > ZIP_MAX_SINGLE_FILE_BYTES || total > ZIP_MAX_TOTAL_BYTES) {
+            throw new Error('Vượt giới hạn 4 MB/file hoặc 25 MB tổng nội dung nhập.');
+        }
+        if (nextFiles[path] && !overwrite) { skipped++; continue; }
+        const item = await makeFile(path, bytes);
+        if (nextFiles[path]) replaced++; else added++;
+        nextFiles[path] = item;
+        changedPaths.push(path);
+    }
+    const project = validateProject({ files: nextFiles, folders: [...nextFolders] });
+    return { project, changedPaths, added, replaced, skipped,
+        addedFolders: project.folders.filter(path => !folders.has(path)) };
+}
+async function importIntoProject(input, label, loadEntries) {
+    if (projectOperationInProgress) { input.value = ''; return showToast('Đang xử lý dự án. Vui lòng chờ.'); }
+    const options = { base: creationBase(), overwrite: $('import-overwrite').checked,
+        keepRoot: $('import-keep-root').checked };
+    const main = document.querySelector('main');
+    const previousInert = main.inert;
+    const previousReadOnly = editor.getOption('readOnly');
+    projectOperationInProgress = true;
+    main.inert = true;
+    editor.setOption('readOnly', true);
+    saveCurrentEditorContent();
+    setSaveStatus('Đang nhập…');
+    showImportResult('Đang đọc ' + label.toLocaleLowerCase('vi') + '…');
+    try {
+        const entries = await loadEntries(options);
+        if (!entries.length) throw new Error('Không tìm thấy file hoặc thư mục để nhập.');
+        const result = await mergeImportedEntries(entries, options.base, options.overwrite);
+        const { project, changedPaths, added, replaced, skipped, addedFolders } = result;
+        const first = chooseImportedStartFile(changedPaths) || currentFile;
+        const nextExpanded = new Set(expanded);
+        for (const path of [...changedPaths, ...addedFolders]) {
+            let parent = parentPath(path);
+            while (parent) { nextExpanded.add(parent); parent = parentPath(parent); }
+        }
+        // Xếp sau mọi lần lưu cũ; chỉ thay dữ liệu trên màn hình khi transaction thành công.
+        await saveQueue.catch(() => {});
+        await writeProject({ ...project, currentFile: first || null, expanded: [...nextExpanded] });
+        revision++;
+        try { localStorage.removeItem(JOURNAL_KEY); } catch (_) { /* IDB đã lưu */ }
+        // Bỏ doc cache của file đã thay, tránh hiển thị/lưu lại code cũ sau ghi đè.
+        changedPaths.forEach(path => documents.delete(path));
+        currentFile = null;
+        files = project.files; folders = new Set(project.folders); expanded = nextExpanded;
+        $('project-search').value = '';
+        if (first) switchFile(first, { persist: false });
+        else { showEmptyEditor(); renderTree(); }
+        setSaveStatus('Đã lưu trên máy');
+        const message = `Thêm ${added} file, ghi đè ${replaced}, bỏ qua ${skipped}` +
+            (addedFolders.length ? `; thêm ${addedFolders.length} thư mục.` : '.');
+        showImportResult(message);
+        showToast(message, 5000);
+    } catch (error) {
+        setSaveStatus('Nhập chưa hoàn tất', true);
+        showImportResult('Không thể nhập ' + label.toLocaleLowerCase('vi') + ': ' + error.message + ' Dự án hiện tại được giữ nguyên.', true);
+        alert('Không thể nhập ' + label.toLocaleLowerCase('vi') + ': ' + error.message + '\nDự án hiện tại được giữ nguyên.');
+    } finally {
+        projectOperationInProgress = false;
+        main.inert = previousInert;
+        editor.setOption('readOnly', currentFile ? !!files[currentFile].binary : previousReadOnly);
+        input.value = '';
+    }
+}
+async function importFiles(event, directory = false) {
     const input = event.target;
     if (!input.files.length) return;
-    if (zipOperationInProgress) { input.value = ''; return showToast('Đang xử lý ZIP.'); }
-    try {
-        saveCurrentEditorContent();
-        const nextFiles = Object.assign(Object.create(null), files);
-        const nextFolders = new Set(folders);
-        const base = creationBase();
-        let first;
-        for (const file of Array.from(input.files)) {
-            const path = safePath((base ? base + '/' : '') + (file.webkitRelativePath || file.name));
-            if (file.size > ZIP_MAX_SINGLE_FILE_BYTES) throw new Error('File lớn hơn 4 MB: ' + path);
-            if (nextFiles[path] || nextFolders.has(path)) throw new Error('Đường dẫn đã tồn tại: ' + path);
-            ensureParents(path, nextFolders, nextFiles);
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            nextFiles[path] = await makeFile(path, bytes);
-            first ||= path;
-        }
-        const project = validateProject({ files: nextFiles, folders: [...nextFolders] });
-        await writeProject({ ...project, currentFile: first, expanded: [...expanded] });
-        files = project.files; folders = new Set(project.folders);
-        $('project-search').value = ''; switchFile(first);
-        showToast('Đã nhập file.');
-    } catch (error) { alert('Không thể nhập file: ' + error.message); }
-    finally { input.value = ''; }
+    const selectedFiles = Array.from(input.files);
+    return importIntoProject(input, directory ? 'Thư mục' : 'File', async options => {
+        return selectedFiles.map(file => {
+            let path = directory ? file.webkitRelativePath : file.name;
+            if (directory) {
+                if (!path || !path.includes('/')) throw new Error('Trình duyệt không cung cấp đường dẫn thư mục. Hãy dùng Nhập ZIP.');
+                path = safePath(path);
+                if (!options.keepRoot) path = path.slice(path.indexOf('/') + 1);
+            }
+            return { path, size: file.size, read: async () => new Uint8Array(await file.arrayBuffer()) };
+        });
+    });
 }
 async function makeFile(path, bytes) {
     const text = TEXT_EXTENSIONS.has(extension(path)) || /^(readme|license)$/i.test(path.split('/').pop());
@@ -488,47 +582,21 @@ async function importZipProject(event) {
     const input = event.target;
     const archive = input.files[0];
     if (!archive) return;
-    if (zipOperationInProgress) { input.value = ''; return showToast('Một thao tác ZIP khác đang chạy.'); }
-    if (typeof JSZip === 'undefined') { input.value = ''; return alert('Không tải được JSZip. Kiểm tra kết nối rồi mở lại ứng dụng.'); }
-    if (archive.size > ZIP_MAX_ARCHIVE_BYTES) { input.value = ''; return alert('ZIP lớn hơn 30 MB.'); }
-    zipOperationInProgress = true;
-    try {
+    return importIntoProject(input, 'ZIP', async () => {
+        if (typeof JSZip === 'undefined') throw new Error('Không tải được JSZip. Kiểm tra kết nối rồi mở lại ứng dụng.');
+        if (archive.size > ZIP_MAX_ARCHIVE_BYTES) throw new Error('ZIP lớn hơn 30 MB.');
         const zip = await JSZip.loadAsync(archive);
-        const entries = Object.values(zip.files);
-        if (entries.length > ZIP_MAX_FILE_COUNT * 2 || entries.filter(e => !e.dir).length > ZIP_MAX_FILE_COUNT) throw new Error('ZIP vượt giới hạn 300 file.');
-        const nextFiles = Object.create(null);
-        const nextFolders = new Set();
-        let total = 0;
-        for (const entry of entries) {
+        return Object.values(zip.files).map(entry => {
             // Không chấp nhận đường dẫn bị JSZip sửa do chứa ../.
             if (entry.unsafeOriginalName && entry.unsafeOriginalName !== entry.name) throw new Error('ZIP chứa đường dẫn không an toàn.');
-            const path = safePath(entry.name);
-            if (entry.dir) { nextFolders.add(path); continue; }
-            const bytes = await entry.async('uint8array');
-            total += bytes.length;
-            if (bytes.length > ZIP_MAX_SINGLE_FILE_BYTES || total > ZIP_MAX_TOTAL_BYTES) throw new Error('Vượt giới hạn 4 MB/file hoặc 25 MB sau giải nén.');
-            nextFiles[path] = await makeFile(path, bytes);
-        }
-        const project = validateProject({ files: nextFiles, folders: [...nextFolders] });
-        if ((Object.keys(files).length || folders.size) && !confirm('Mở ZIP này sẽ thay dự án hiện tại. Hãy xuất ZIP trước nếu cần giữ dự án cũ. Tiếp tục?')) return;
-        // Chờ những lần lưu cũ rồi ghi nguyên dự án trong một transaction.
-        await saveQueue.catch(() => {});
-        const first = chooseImportedStartFile(Object.keys(project.files));
-        await writeProject({ ...project, currentFile: first || null, expanded: [] });
-        revision++;
-        try { localStorage.removeItem(JOURNAL_KEY); } catch (_) { /* Không có nhật ký */ }
-        files = project.files; folders = new Set(project.folders); expanded.clear(); documents.clear();
-        currentFile = null; selectedPath = ''; selectedFolder = true;
-        $('project-search').value = '';
-        if (first) switchFile(first); else { showEmptyEditor(); renderTree(); setSaveStatus('Đã lưu trên máy'); }
-        showToast('Đã nhập ZIP, giữ nguyên thư mục và tài nguyên.');
-    } catch (error) { alert('Không thể nhập ZIP: ' + error.message); }
-    finally { zipOperationInProgress = false; input.value = ''; }
+            return { path: entry.name, directory: entry.dir, read: () => entry.async('uint8array') };
+        });
+    });
 }
 async function exportProjectZip() {
-    if (zipOperationInProgress) return showToast('Một thao tác ZIP khác đang chạy.');
+    if (projectOperationInProgress) return showToast('Đang xử lý dự án. Vui lòng chờ.');
     if (typeof JSZip === 'undefined') return alert('Không tải được JSZip. Kiểm tra kết nối rồi mở lại ứng dụng.');
-    zipOperationInProgress = true;
+    projectOperationInProgress = true;
     try {
         saveCurrentEditorContent();
         const zip = new JSZip();
@@ -539,7 +607,7 @@ async function exportProjectZip() {
         downloadBlobFile(blob, 'code-editor-lite.zip');
         showToast('Đã xuất ZIP.');
     } catch (error) { alert('Không thể xuất ZIP: ' + error.message); }
-    finally { zipOperationInProgress = false; }
+    finally { projectOperationInProgress = false; }
 }
 // Chạy hoàn toàn trong iframe có origin riêng; không cấp allow-same-origin.
 function previewProject(project, entry) {
