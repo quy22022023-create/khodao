@@ -52,8 +52,15 @@ body.tree-hidden #project-sidebar { display: none; }
 .search-result { display: block; padding: 10px; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; overflow-wrap: anywhere; }
 .search-result small { display: block; color: #acacb9; margin-top: 5px; white-space: pre-wrap; }
 .empty-message { padding: 16px 8px; font-size: 13px; color: var(--text-muted); }
-.project-io { display: flex; gap: 5px; border-top: 1px solid var(--border-color); padding-top: 10px; }
-.project-io button { flex: 1; font-size: 12px; padding: 6px; }
+.project-io { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border-color); padding-top: 10px; max-height: 48%; overflow-y: auto; flex-shrink: 0; }
+.io-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.project-io button { font-size: 12px; padding: 6px; }
+.import-option { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 12px; line-height: 1.5; cursor: pointer; }
+.import-option input { flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--ios-blue); }
+.import-destination, .import-help, .import-result { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.import-destination, .import-help { color: #acacb9; }
+.import-result { color: #93c6a3; }
+.import-result.error { color: #ff867e; }
 .editor-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .file-heading { display: flex; gap: 10px; align-items: center; min-height: 40px; padding: 8px 12px; background: #19191e; border-bottom: 1px solid var(--border-color); font-size: 12px; }
 #current-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
