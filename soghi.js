@@ -4,6 +4,7 @@
   const DB_NAME = "soghi_local_demo_v1";
   const DB_VERSION = 3;
   const Ledger = globalThis.SoghiLedger;
+  const UI = globalThis.SoghiUI;
   const STORE_NAMES = { harvesters: "harvesters", entries: "entries", rates: "soghi_rates", advances: "soghi_advances", settlements: "soghi_settlements" };
   const SESSION_KEY = "soghi_demo_session";
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -34,7 +35,13 @@
     bookData: null,
     viewToken: 0,
     saving: false,
-    keyboardHeight: 0
+    keyboardHeight: 0,
+    picker: null,
+    navigationBusy: false,
+    statistics: null,
+    statsData: null,
+    statsReturn: null,
+    viewportWidth: 0
   };
 
   function todayISO() {
@@ -269,13 +276,17 @@
     state.toastTimer = setTimeout(() => toastNode.classList.remove("show"), 2400);
   }
   let modalGeneration = 0;
-  function showModal(title, bodyHTML, actionsHTML, onSubmit) {
+  function showModal(title, bodyHTML, actionsHTML, onSubmit, options = {}) {
+    closePersonPicker(false);
     const generation = ++modalGeneration;
     let busy = false;
     setVirtualKeyboard(false);
+    modal.classList.toggle("menu-dialog", options.menu === true);
     modalTitle.textContent = title;
     modalBody.innerHTML = bodyHTML;
     modalActions.innerHTML = actionsHTML;
+    modalActions.hidden = !actionsHTML;
+    UI.bindDates(modalBody);
     modal.showModal();
     modalForm.onsubmit = async event => {
       event.preventDefault();
@@ -313,7 +324,141 @@
     return `<div class="status-line"><span class="connection-pill"><i class="connection-dot"></i>${escapeHTML(connectionText())}</span></div>`;
   }
 
+  function personColor(person) { return UI.color(person, state.settings.theme === "blue" ? "#245a85" : "#176b3a"); }
+  function actionMenu(title, items, intro = "") {
+    showModal(title, `${intro}<div class="action-menu">${items.map((item, i) => `<button type="button" data-menu-action="${i}" ${item.id ? `id="${item.id}"` : ""} class="menu-action${item.danger ? " menu-danger" : ""}"><span class="menu-action-icon">${UI.icon(item.icon)}</span><span>${item.label}${item.hint ? `<small>${item.hint}</small>` : ""}</span><span class="menu-action-arrow" aria-hidden="true">›</span></button>`).join("")}</div>`, "", null, { menu: true });
+    modalBody.querySelectorAll("[data-menu-action]").forEach(button => button.addEventListener("click", run(async () => {
+      const item = items[Number(button.dataset.menuAction)];
+      closeModal(); await item.action();
+    })));
+  }
+  function openHomeMenu() {
+    actionMenu("Menu chính", [
+      { label: "Thống kê", hint: "Tổng sản lượng và biểu đồ", icon: "chart", id: "open-statistics", action: () => openStatistics() },
+      { label: "Thêm người hái", icon: "add", id: "add-person-top", action: openAddPerson },
+      { label: "Cài đặt", hint: "Đơn giá, sao lưu và đồng bộ", icon: "settings", id: "open-settings", action: openSettings }
+    ]);
+  }
+  async function openBookMenu() {
+    if (state.saving) return showToast("Đang lưu, vui lòng chờ.");
+    const context = bookContext(), wasOpen = !virtualKeyboard.hidden, data = await getAccountData(context.accountId);
+    if (!sameBook(context)) return;
+    const person = data.harvesters.find(p => p.id === context.harvesterId);
+    if (!person) return renderHome();
+    const locked = Ledger.lockedIds(data), used = Ledger.allocations(data);
+    const pending = data.entries.filter(e => e.harvesterId === person.id && !locked.has(e.id)).reduce((s, e) => s + Ledger.kg100(e.kg), 0);
+    const advance = data.advances.filter(a => a.harvesterId === person.id).reduce((s, a) => s + a.amount - (used.get(a.id) || 0), 0);
+    actionMenu(person.name, [
+      { label: "Ứng tiền", icon: "wallet", id: "add-advance", action: () => openAdvance(person.id) },
+      { label: "Kết sổ", icon: "settle", id: "settle-book", action: () => openSettlement(person.id) },
+      { label: "Lịch sử", icon: "history", id: "finance-history", action: () => openFinanceHistory(person.id) },
+      { label: "Màu hiển thị", icon: "palette", id: "person-color", action: () => openPersonColor(person.id) },
+      { label: "Thống kê", icon: "chart", id: "open-statistics", action: () => openStatistics({ personId: person.id, returnKeyboard: wasOpen }) },
+      { label: "Cài đặt", icon: "settings", id: "open-settings", action: openSettings }
+    ], `<p class="menu-overview">Chưa kết sổ: <strong>${formatNumber(pending / 100)} kg</strong><br>Còn ứng: <strong>${money(advance)}</strong></p>`);
+  }
+  async function openPersonMenu(id) {
+    const token = state.viewToken, person = await getOne("harvesters", id);
+    if (token !== state.viewToken || !person || person.accountId !== state.account?.id) return;
+    actionMenu(person.name, [
+      { label: "Mở sổ", icon: "person", action: async () => { state.currentHarvesterId = id; state.currentDate = todayISO(); await renderBook(); } },
+      { label: "Sửa tên", icon: "edit", id: "edit-person", action: () => editPerson(id) },
+      { label: "Màu hiển thị", icon: "palette", id: "person-color", action: () => openPersonColor(id) },
+      { label: "Xóa người hái", icon: "trash", danger: true, id: "delete-person", action: () => deletePerson(id) }
+    ]);
+  }
+  async function openPersonColor(id) {
+    const accountId = state.account.id, person = await getOne("harvesters", id);
+    if (!person || person.accountId !== accountId || state.account?.id !== accountId) return;
+    const selected = UI.palette.some(p => p.value === person.color) ? person.color : "";
+    showModal("Màu hiển thị", `<p class="form-hint">Màu của thanh tiêu đề, tên và biểu tượng <strong>${escapeHTML(person.name)}</strong>. Trang giấy vẫn giữ nền kem.</p>
+      <div class="color-preview" style="--person-color:${personColor(person)}"><span class="person-avatar">${escapeHTML([...person.name][0])}</span><strong>${escapeHTML(person.name)}</strong></div>
+      <fieldset class="color-options"><legend class="sr-only">Chọn màu cho người hái</legend>
+        <label class="color-option color-default"><input type="radio" name="color" value="" ${!selected ? "checked" : ""}><span class="color-choice">Theo màu chung</span></label>
+        ${UI.palette.map(p => `<label class="color-option" style="--swatch:${p.value}"><input type="radio" name="color" value="${p.value}" ${selected === p.value ? "checked" : ""}><span class="color-choice"><span class="color-dot" aria-hidden="true"></span>${p.label}</span></label>`).join("")}
+      </fieldset>`, standardActions("Lưu màu"), async form => {
+      const value = String(form.get("color") || "");
+      if (value && !UI.palette.some(p => p.value === value)) throw new Error("Màu không hợp lệ.");
+      await transaction(["harvesters"], "readwrite", async (tx, request) => {
+        const latest = await request(tx.objectStore("harvesters").get(id));
+        if (!latest || latest.accountId !== accountId) throw new Error("Người hái không còn tồn tại.");
+        if (value) latest.color = value; else delete latest.color;
+        latest.updatedAt = new Date().toISOString(); tx.objectStore("harvesters").put(latest);
+      });
+      await updateVisibleData(); showToast("Đã lưu màu hiển thị.");
+    });
+    modalCancel();
+    modalBody.querySelectorAll('input[name="color"]').forEach(input => input.addEventListener("change", () => {
+      $(".color-preview", modalBody).style.setProperty("--person-color", UI.color({ color: input.value }, personColor(null)));
+    }));
+  }
+  function placePersonPicker() {
+    if (!state.picker) return;
+    const top = $(".book-topbar")?.getBoundingClientRect().bottom || 72;
+    const picker = $("#soghi-person-picker"), height = window.visualViewport?.height || innerHeight;
+    picker.style.top = (top + 6) + "px";
+    picker.style.maxHeight = Math.max(120, Math.min(380, height - top - 18)) + "px";
+  }
+  function renderPersonPicker() {
+    if (!state.picker || state.screen !== "book") return;
+    const query = normalizeUsername($("#person-picker-search").value);
+    const people = state.bookData.harvesters.filter(p => normalizeUsername(p.name).includes(query)).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    $("#person-picker-list").innerHTML = people.length ? people.map(p => `<button type="button" data-switch-person="${escapeHTML(p.id)}" aria-current="${p.id === state.currentHarvesterId}" style="--person-color:${personColor(p)}"><span class="person-avatar">${escapeHTML([...p.name][0])}</span><span class="picker-person-name">${escapeHTML(p.name)}</span><span class="picker-current">${p.id === state.currentHarvesterId ? "Đang mở ✓" : ""}</span></button>`).join("") : '<p class="picker-empty" role="status">Không tìm thấy người hái.</p>';
+    placePersonPicker();
+  }
+  function togglePersonPicker() {
+    if (state.picker) return closePersonPicker();
+    if (state.saving || state.navigationBusy || dateFlipBusy) return showToast("Đang mở/lưu trang sổ, vui lòng chờ.");
+    state.picker = { context: bookContext(), keyboardOpen: !virtualKeyboard.hidden };
+    setVirtualKeyboard(false);
+    $("#person-picker-search").value = "";
+    $("#soghi-person-picker").hidden = false; $("#soghi-picker-backdrop").hidden = false;
+    $("#book-person-toggle").setAttribute("aria-expanded", "true");
+    document.body.classList.add("person-picker-open"); renderPersonPicker();
+  }
+  function closePersonPicker(restoreKeyboard = true) {
+    const picker = state.picker;
+    state.picker = null;
+    $("#soghi-person-picker").hidden = true; $("#soghi-picker-backdrop").hidden = true;
+    if (document.activeElement === $("#person-picker-search")) document.activeElement.blur();
+    $("#book-person-toggle")?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("person-picker-open");
+    if (restoreKeyboard && picker && sameBook(picker.context)) setVirtualKeyboard(picker.keyboardOpen);
+  }
+  async function switchPerson(id) {
+    if (!state.picker || state.saving || state.navigationBusy) return;
+    const picker = state.picker;
+    if (!state.bookData.harvesters.some(p => p.id === id)) return;
+    closePersonPicker(false); state.navigationBusy = true;
+    toastNode.classList.remove("show"); clearTimeout(state.toastTimer);
+    try {
+      state.currentHarvesterId = id;
+      await renderBook();
+      if (state.screen === "book" && state.currentHarvesterId === id) setVirtualKeyboard(picker.keyboardOpen);
+    } finally { state.navigationBusy = false; }
+  }
+  $("#soghi-picker-backdrop").addEventListener("click", () => closePersonPicker());
+  $("#close-person-picker").addEventListener("click", () => closePersonPicker());
+  $("#person-picker-search").addEventListener("input", renderPersonPicker);
+  $("#person-picker-list").addEventListener("click", run(event => {
+    const target = event.target.closest("[data-switch-person]");
+    if (target) return switchPerson(target.dataset.switchPerson);
+  }));
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && state.picker) { event.preventDefault(); closePersonPicker(); $("#book-person-toggle")?.focus({ preventScroll: true }); } });
+  function updateViewportSpace() {
+    const changedWidth = state.viewportWidth !== innerWidth;
+    state.viewportWidth = innerWidth;
+    document.documentElement.style.setProperty("--soghi-viewport-height", (window.visualViewport?.height || innerHeight) + "px");
+    placePersonPicker();
+    if (changedWidth && state.screen === "statistics" && state.statistics?.view === "chart") renderStatisticsResults();
+  }
+  window.addEventListener("resize", updateViewportSpace);
+  window.visualViewport?.addEventListener("resize", updateViewportSpace);
+  window.addEventListener("scroll", placePersonPicker, { passive: true });
+  updateViewportSpace();
+
   function renderAuth() {
+    closePersonPicker(false);
     hideEntryDock();
     parkEntryDock();
     state.viewToken++;
@@ -444,6 +589,7 @@
   }
 
   async function renderHome() {
+    closePersonPicker(false);
     hideEntryDock();
     state.screen = "home";
     state.currentHarvesterId = null;
@@ -459,14 +605,13 @@
       const initial = [...person.name.trim()][0] || "•";
       return `
         <article class="person-row">
-          <div class="person-avatar">${escapeHTML(initial.toLocaleUpperCase("vi-VN"))}</div>
+          <div class="person-avatar" style="--person-color:${personColor(person)}">${escapeHTML(initial.toLocaleUpperCase("vi-VN"))}</div>
           <div class="person-main" data-open-person="${escapeHTML(person.id)}">
-            <p class="person-name">${escapeHTML(person.name)}</p>
+            <p class="person-name" style="color:${personColor(person)}">${escapeHTML(person.name)}</p>
             <p class="person-date">${lastDate ? `Ghi gần nhất: ${formatDate(lastDate)}` : "Chưa có ghi chép"}</p>
           </div>
           <div class="person-tools">
-            <button type="button" title="Sửa tên" aria-label="Sửa tên" data-edit-person="${escapeHTML(person.id)}">✎</button>
-            <button type="button" title="Xóa người hái" aria-label="Xóa người hái" data-delete-person="${escapeHTML(person.id)}">⋯</button>
+            <button type="button" title="Thao tác với người hái" aria-label="Thao tác với ${escapeHTML(person.name)}" data-person-menu="${escapeHTML(person.id)}">${UI.icon("more")}</button>
           </div>
         </article>`;
     }).join("") : `
@@ -484,8 +629,7 @@
           <div><h1>Sổ ghi công hái</h1><small>${escapeHTML(state.account.displayName)}</small></div>
         </div>
         <div class="top-actions">
-          <button class="icon-button" id="add-person-top" aria-label="Thêm người">＋</button>
-          <button class="icon-button" id="open-settings" aria-label="Cài đặt">⚙</button>
+          <button class="icon-button" id="home-menu" aria-label="Menu chính">${UI.icon("more")}</button>
         </div>
       </header>
       <main class="page-wrap">
@@ -509,17 +653,15 @@
       if (searchCaret !== null) input.setSelectionRange(searchCaret, searchCaret);
     }
     $("#person-search").addEventListener("input", event => { state.search = event.target.value; filterPeople(); });
-    $("#add-person-top").addEventListener("click", openAddPerson);
     $("#add-person-fab").addEventListener("click", openAddPerson);
-    $("#open-settings").addEventListener("click", openSettings);
+    $("#home-menu").addEventListener("click", openHomeMenu);
     app.querySelectorAll("[data-open-person]").forEach(node => node.addEventListener("click", () => {
       state.currentHarvesterId = node.dataset.openPerson;
       state.currentDate = todayISO();
       showEntryDock(false);
       run(renderBook)();
     }));
-    app.querySelectorAll("[data-edit-person]").forEach(node => node.addEventListener("click", run(() => editPerson(node.dataset.editPerson))));
-    app.querySelectorAll("[data-delete-person]").forEach(node => node.addEventListener("click", run(() => deletePerson(node.dataset.deletePerson))));
+    app.querySelectorAll("[data-person-menu]").forEach(node => node.addEventListener("click", run(() => openPersonMenu(node.dataset.personMenu))));
   }
 
   function openAddPerson() {
@@ -551,9 +693,11 @@
       if (harvesters.some(p => p.id !== id && normalizeUsername(p.name) === normalizeUsername(name))) {
         throw new Error("Tên người hái này đã được sử dụng.");
       }
-      person.name = name;
-      person.updatedAt = new Date().toISOString();
-      await put("harvesters", person);
+      await transaction(["harvesters"], "readwrite", async (tx, request) => {
+        const latest = await request(tx.objectStore("harvesters").get(id));
+        if (!latest || latest.accountId !== state.account.id) throw new Error("Không tìm thấy người hái.");
+        tx.objectStore("harvesters").put({ ...latest, name, updatedAt: new Date().toISOString() });
+      });
       await renderHome();
       showToast("Đã cập nhật tên.");
     });
@@ -587,6 +731,7 @@
     if (app.contains(entryDock)) document.body.appendChild(entryDock);
   }
   async function changeDate(value, direction = 0) {
+    closePersonPicker();
     if (!Ledger.isDate(value) || state.saving || dateFlipBusy) return;
     const context = bookContext();
     dateFlipBusy = true;
@@ -612,6 +757,7 @@
     return changeDate(shiftDate(state.currentDate, direction), direction);
   }
   async function renderBook() {
+    closePersonPicker(false);
     state.screen = "book";
     const token = ++state.viewToken;
     const context = bookContext();
@@ -623,14 +769,14 @@
     parkEntryDock();
     gridObserver?.disconnect();
     app.innerHTML = `
-      <header class="topbar book-topbar">
+      <header class="topbar book-topbar" style="--person-color:${personColor(person)}">
         <button class="icon-button" id="back-home" aria-label="Quay lại">‹</button>
-        <div class="book-title"><h1>${escapeHTML(person.name)}</h1><small>Sổ ghi sản lượng</small></div>
-        <button class="icon-button" id="book-settings" aria-label="Cài đặt">⚙</button>
+        <button type="button" class="book-title book-person-toggle" id="book-person-toggle" aria-label="Chuyển người, đang mở sổ ${escapeHTML(person.name)}" aria-expanded="false" aria-controls="soghi-person-picker"><span><strong>${escapeHTML(person.name)}</strong><small>Sổ ghi sản lượng</small></span>${UI.icon("down")}</button>
+        <button class="icon-button" id="book-menu" aria-label="Menu sổ">${UI.icon("more")}</button>
       </header>
       <div class="date-tools">
         <button class="day-button" id="previous-day" aria-label="Ngày trước">‹</button>
-        <input type="date" id="book-date" value="${escapeHTML(context.date)}" aria-label="Chọn ngày">
+        ${UI.dateField({ id: "book-date", value: context.date, label: "Chọn ngày ghi sổ" })}
         <button class="day-button" id="next-day" aria-label="Ngày sau">›</button>
       </div>
       <main class="book-wrap">
@@ -644,29 +790,20 @@
           </div>
           <div class="book-note">Số đang gõ có viền xanh, chưa tính vào tổng. Chạm số đã lưu để sửa.</div>
         </section>
-        <section class="finance-panel" aria-label="Tiền công">
-          <div class="finance-overview" id="finance-overview"></div>
-          <div class="finance-actions">
-            <button class="secondary-button" id="add-advance">Ứng tiền</button>
-            <button class="primary-button" id="settle-book">Kết sổ</button>
-            <button class="secondary-button" id="finance-history">Lịch sử</button>
-          </div>
-        </section>
         ${connectionHTML()}
       </main>`;
-    $("#book-settings").insertAdjacentElement("beforebegin", entryDock);
+    $("#book-menu").insertAdjacentElement("beforebegin", entryDock);
+    UI.bindDates(app);
     showEntryDock(false);
     $("#back-home").addEventListener("click", run(async () => {
       if (state.saving) return showToast("Đang lưu, vui lòng chờ.");
       await renderHome();
     }));
-    $("#book-settings").addEventListener("click", run(openSettings));
+    $("#book-menu").addEventListener("click", run(openBookMenu));
+    $("#book-person-toggle").addEventListener("click", togglePersonPicker);
     $("#book-date").addEventListener("change", run(event => changeDate(event.target.value)));
     $("#previous-day").addEventListener("click", run(() => flipToDate(-1)));
     $("#next-day").addEventListener("click", run(() => flipToDate(1)));
-    $("#add-advance").addEventListener("click", run(() => openAdvance(context.harvesterId)));
-    $("#settle-book").addEventListener("click", run(() => openSettlement(context.harvesterId)));
-    $("#finance-history").addEventListener("click", run(() => openFinanceHistory(context.harvesterId)));
     $(".notebook-grid").addEventListener("click", run(event => {
       if (state.saving) return;
       const cell = event.target.closest("button");
@@ -714,11 +851,13 @@
   function renderBookContent() {
     if (state.screen !== "book" || !state.bookData || !$(".notebook-grid")) return;
     renderGrid();
-    const data = state.bookData, locked = Ledger.lockedIds(data), used = Ledger.allocations(data);
-    const pending = data.entries.filter(e => e.harvesterId === state.currentHarvesterId && !locked.has(e.id));
-    const remaining = data.advances.filter(a => a.harvesterId === state.currentHarvesterId)
-      .reduce((s, a) => s + a.amount - (used.get(a.id) || 0), 0);
-    $("#finance-overview").textContent = `Chưa kết sổ: ${formatNumber(pending.reduce((s, e) => s + Ledger.kg100(e.kg), 0) / 100)} kg · Còn ứng: ${money(remaining)}`;
+    const person = state.bookData.harvesters.find(p => p.id === state.currentHarvesterId);
+    if (person) {
+      $(".book-topbar").style.setProperty("--person-color", personColor(person));
+      $("#book-person-toggle strong").textContent = person.name;
+      $("#book-person-toggle").setAttribute("aria-label", "Chuyển người, đang mở sổ " + person.name);
+    }
+    if (state.picker) renderPersonPicker();
   }
   function renderGrid() {
     const grid = $(".notebook-grid");
@@ -772,6 +911,7 @@
     virtualKeyboard.hidden = true;
     document.body.classList.remove("entry-active", "keyboard-open");
     keyboardToggle.setAttribute("aria-expanded", "false");
+    keyboardToggle.setAttribute("aria-label", "Mở bàn phím nhập kg");
     updateKeyboardSpace();
   }
   function showKgDisplay() {
@@ -861,7 +1001,10 @@
       state.drafts.delete(draftKey(context)); await refreshBook(context); showToast("Đã xóa số kg.");
     } finally { setEntryBusy(false); }
   }
-  keyboardToggle.addEventListener("click", () => setVirtualKeyboard(virtualKeyboard.hidden));
+  keyboardToggle.addEventListener("click", () => {
+    if (state.picker) { const wasOpen = state.picker.keyboardOpen; closePersonPicker(false); setVirtualKeyboard(!wasOpen); }
+    else setVirtualKeyboard(virtualKeyboard.hidden);
+  });
   virtualKeyboard.querySelectorAll("[data-key]").forEach(button => button.addEventListener("click", run(() => {
     const key = button.dataset.key;
     return key === "enter" ? submitVirtualKg() : appendVirtualKey(key);
@@ -880,6 +1023,116 @@
   async function updateVisibleData() {
     if (state.screen === "book") await refreshBook();
     else if (state.screen === "home") await renderHome();
+    else if (state.screen === "statistics") await refreshStatistics();
+  }
+  async function openStatistics(options = {}) {
+    closePersonPicker();
+    toastNode.classList.remove("show"); clearTimeout(state.toastTimer);
+    const fromBook = state.screen === "book";
+    state.statsReturn = fromBook ? { screen: "book", ...bookContext(), keyboardOpen: options.returnKeyboard ?? !virtualKeyboard.hidden } : { screen: "home" };
+    if (!state.statistics) state.statistics = { personId: "all", preset: "today", from: todayISO(), to: todayISO(), view: "table", group: fromBook ? "day" : "person" };
+    if (options.personId) {
+      Object.assign(state.statistics, { personId: options.personId, preset: fromBook && state.currentDate !== todayISO() ? "range" : "today", from: fromBook ? state.currentDate : todayISO(), to: fromBook ? state.currentDate : todayISO() });
+    }
+    await renderStatistics();
+  }
+  async function renderStatistics() {
+    hideEntryDock(); parkEntryDock(); gridObserver?.disconnect();
+    state.screen = "statistics";
+    const token = ++state.viewToken, accountId = state.account.id, data = await getAccountData(accountId);
+    if (state.screen !== "statistics" || token !== state.viewToken || accountId !== state.account?.id) return;
+    state.statsData = data;
+    const f = state.statistics;
+    if (f.personId !== "all" && !data.harvesters.some(p => p.id === f.personId)) f.personId = "all";
+    app.innerHTML = `
+      <header class="topbar statistics-topbar"><button class="icon-button" id="back-statistics" aria-label="Quay lại">${UI.icon("back")}</button><div class="book-title"><h1>Thống kê</h1><small>Sản lượng của đội và từng người</small></div></header>
+      <main class="stats-wrap">
+        <section class="stats-filters" aria-label="Bộ lọc thống kê">
+          <div class="stats-filter-row">
+            <div class="form-field"><label for="stats-person">Xem sản lượng</label><select id="stats-person"><option value="all">Cả đội</option>${data.harvesters.map(p => `<option value="${escapeHTML(p.id)}" ${f.personId === p.id ? "selected" : ""}>${escapeHTML(p.name)}</option>`).join("")}</select></div>
+            <div class="form-field"><label for="stats-period">Thời gian</label><select id="stats-period"><option value="today" ${f.preset === "today" ? "selected" : ""}>Hôm nay</option><option value="range" ${f.preset === "range" ? "selected" : ""}>Khoảng ngày</option><option value="all" ${f.preset === "all" ? "selected" : ""}>Toàn bộ</option></select></div>
+          </div>
+          <div id="stats-dates" class="date-range" ${f.preset !== "range" ? "hidden" : ""}>
+            <div class="form-field"><label for="stats-from">Từ ngày</label>${UI.dateField({ id: "stats-from", value: f.from, label: "Thống kê từ ngày", required: true })}</div>
+            <div class="form-field"><label for="stats-to">Đến ngày</label>${UI.dateField({ id: "stats-to", value: f.to, label: "Thống kê đến ngày", required: true })}</div>
+          </div>
+        </section>
+        <section class="stats-summary" aria-label="Tổng sản lượng đã lưu"><span class="summary-label">TỔNG SẢN LƯỢNG</span><strong id="stats-total">0 <small>kg</small></strong><div class="stats-summary-details"><span><strong id="stats-count">0</strong> lần ghi</span><span><strong id="stats-people">0</strong> người có ghi chép</span></div></section>
+        <section class="stats-output" aria-label="Chi tiết thống kê">
+          <div class="stats-presentation"><div class="stats-view-switch" role="group" aria-label="Cách hiển thị"><button type="button" data-stats-view="table">Bảng số liệu</button><button type="button" data-stats-view="chart">${UI.icon("chart")} Biểu đồ</button></div>
+            <div class="form-field stats-group-field"><label for="stats-group">Nhóm theo</label><select id="stats-group"><option value="person" ${f.group === "person" ? "selected" : ""}>Theo người</option><option value="day" ${f.group === "day" ? "selected" : ""}>Theo ngày</option></select></div>
+          </div>
+          <p id="stats-description" class="stats-description"></p><div id="stats-result" aria-live="polite"></div>
+          <p class="form-hint" id="stats-note"></p>
+        </section>
+        ${connectionHTML()}
+      </main>`;
+    window.scrollTo(0, 0);
+    UI.bindDates(app);
+    $("#back-statistics").addEventListener("click", run(async () => {
+      const target = state.statsReturn;
+      if (target?.screen === "book" && target.accountId === state.account.id) {
+        state.currentHarvesterId = target.harvesterId; state.currentDate = target.date;
+        await renderBook(); if (state.screen === "book") setVirtualKeyboard(target.keyboardOpen);
+      } else await renderHome();
+    }));
+    $("#stats-person").addEventListener("change", event => { f.personId = event.target.value; renderStatisticsResults(); });
+    $("#stats-period").addEventListener("change", event => { f.preset = event.target.value; $("#stats-dates").hidden = f.preset !== "range"; renderStatisticsResults(); });
+    for (const key of ["from", "to"]) $("#stats-" + key).addEventListener("change", event => { f[key] = event.target.value; renderStatisticsResults(); });
+    $("#stats-group").addEventListener("change", event => { f.group = event.target.value; renderStatisticsResults(); });
+    app.querySelectorAll("[data-stats-view]").forEach(button => button.addEventListener("click", () => { f.view = button.dataset.statsView; renderStatisticsResults(); }));
+    function showColumn(event) {
+      const target = event.target.closest("[data-chart-index]");
+      if (!target || (event.type === "keydown" && !["Enter", " "].includes(event.key))) return;
+      if (event.type === "keydown") event.preventDefault();
+      const row = state.statsResult?.rows[Number(target.dataset.chartIndex)];
+      if (!row) return;
+      $("#stats-chart-detail").textContent = `${row.label}: ${formatNumber(row.kg100 / 100)} kg · ${row.count} lần ghi`;
+      $("#stats-result").querySelectorAll("[data-chart-index]").forEach(node => { node.classList.toggle("chart-selected", node === target); node.setAttribute("aria-pressed", String(node === target)); });
+    }
+    $("#stats-result").addEventListener("click", showColumn);
+    $("#stats-result").addEventListener("keydown", showColumn);
+    renderStatisticsResults();
+  }
+  async function refreshStatistics() {
+    const accountId = state.account.id, token = state.viewToken, data = await getAccountData(accountId);
+    if (state.screen !== "statistics" || token !== state.viewToken || state.account?.id !== accountId) return;
+    state.statsData = data;
+    const f = state.statistics;
+    if (f.personId !== "all" && !data.harvesters.some(p => p.id === f.personId)) f.personId = "all";
+    $("#stats-person").innerHTML = `<option value="all">Cả đội</option>${data.harvesters.map(p => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)}</option>`).join("")}`;
+    $("#stats-person").value = f.personId;
+    renderStatisticsResults();
+  }
+  function renderStatisticsResults() {
+    if (state.screen !== "statistics" || !state.statsData || !$("#stats-result")) return;
+    const f = state.statistics, data = state.statsData;
+    let from = "", to = "";
+    if (f.preset === "today") from = to = todayISO();
+    if (f.preset === "range") { from = f.from; to = f.to; }
+    app.querySelectorAll("[data-stats-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.statsView === f.view)));
+    const who = f.personId === "all" ? "Cả đội" : data.harvesters.find(p => p.id === f.personId)?.name || "Người hái";
+    $("#stats-description").textContent = `${who} · ${f.preset === "all" ? "Toàn bộ thời gian" : from === to ? UI.dateText(from) : `${UI.dateText(from)} – ${UI.dateText(to)}`}`;
+    try {
+      if (f.preset === "range" && (!Ledger.isDate(from) || !Ledger.isDate(to))) throw new Error("Chọn đầy đủ ngày bắt đầu và ngày kết thúc.");
+      const result = UI.summarize(data, { ...f, from, to, defaultColor: personColor(null) });
+      state.statsResult = result;
+      $("#stats-total").innerHTML = `${formatNumber(result.kg100 / 100)} <small>kg</small>`;
+      $("#stats-count").textContent = result.count; $("#stats-people").textContent = result.peopleCount;
+      $("#stats-note").textContent = (f.group === "day" ? "Chỉ liệt kê ngày có ghi chép. " : "") + "Tính số đã lưu, gồm cả phần đã kết sổ. Không tính bản nháp.";
+      if (!result.count) { $("#stats-result").innerHTML = '<div class="empty-state"><strong>Chưa có sản lượng đã lưu</strong>Thử chọn người hoặc khoảng ngày khác.</div>'; return; }
+      if (f.view === "chart") {
+        const width = $("#stats-result").clientWidth;
+        $("#stats-result").innerHTML = `<div class="stats-chart" id="stats-chart">${UI.chart(result, width)}</div><div class="stats-chart-detail" id="stats-chart-detail" role="status">Chạm một cột để xem chi tiết. Vuốt ngang nếu có nhiều cột.</div>`;
+      } else {
+        $("#stats-result").innerHTML = `<div class="ledger-table-wrap"><table class="ledger-table stats-table"><caption class="sr-only">Sản lượng theo ${f.group === "day" ? "ngày" : "người"}</caption><thead><tr><th>${f.group === "day" ? "Ngày" : "Người hái"}</th><th>Số lần</th><th>Tổng kg</th></tr></thead><tbody>${result.rows.map(row => `<tr><td>${f.group === "person" ? `<span class="stats-person-dot" style="background:${row.color}" aria-hidden="true"></span>` : ""}${escapeHTML(row.label)}</td><td>${row.count}</td><td>${formatNumber(row.kg100 / 100)}</td></tr>`).join("")}</tbody></table></div>`;
+      }
+    } catch (error) {
+      state.statsResult = null;
+      $("#stats-total").textContent = "—"; $("#stats-count").textContent = "—"; $("#stats-people").textContent = "—";
+      $("#stats-note").textContent = "";
+      $("#stats-result").innerHTML = `<p class="stats-error" role="alert">${escapeHTML(error.message)}</p>`;
+    }
   }
   async function openRates(editId = null) {
     const accountId = state.account.id, data = await getAccountData(accountId);
@@ -892,7 +1145,7 @@
         <option value="">Tất cả người hái (giá chung)</option>
         ${data.harvesters.map(p => `<option value="${escapeHTML(p.id)}" ${editing?.harvesterId === p.id ? "selected" : ""}>${escapeHTML(p.name)} (giá riêng)</option>`).join("")}
       </select></div>
-      <div class="form-field"><label for="rate-date">Bắt đầu áp dụng từ ngày</label><input id="rate-date" name="date" type="date" value="${editing?.effectiveDate || state.currentDate || todayISO()}" required></div>
+      <div class="form-field"><label for="rate-date">Bắt đầu áp dụng từ ngày</label>${UI.dateField({ id: "rate-date", name: "date", value: editing?.effectiveDate || state.currentDate || todayISO(), label: "Ngày bắt đầu áp dụng đơn giá", required: true })}</div>
       <div class="form-field"><label for="rate-amount">Đơn giá (đồng/kg)</label><input id="rate-amount" name="amount" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="9" value="${editing?.amount ?? ""}" placeholder="Ví dụ: 2500" required></div>
       <h3 class="section-label">Các mức giá đã đặt</h3>
       <div class="ledger-list">${sorted.length ? sorted.map(r => `<div class="ledger-item">
@@ -932,7 +1185,7 @@
     if (editing && Ledger.allocations(data).get(editing.id)) throw new Error("Khoản ứng đã khấu trừ không thể sửa hoặc xóa.");
     showModal(editing ? "Sửa khoản ứng" : "Ghi ứng tiền", `
       <p class="form-hint">Người hái: <strong>${escapeHTML(person.name)}</strong></p>
-      <div class="form-field"><label for="advance-date">Ngày ứng</label><input type="date" id="advance-date" name="date" value="${editing?.date || state.currentDate || todayISO()}" required></div>
+      <div class="form-field"><label for="advance-date">Ngày ứng</label>${UI.dateField({ id: "advance-date", name: "date", value: editing?.date || state.currentDate || todayISO(), label: "Ngày ứng tiền", required: true })}</div>
       <div class="form-field"><label for="advance-amount">Số tiền (đồng)</label><input id="advance-amount" name="amount" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="13" placeholder="Ví dụ: 100000" value="${editing?.amount ?? ""}" required></div>
       <div class="form-field"><label for="advance-note">Ghi chú</label><input id="advance-note" name="note" maxlength="500" value="${escapeHTML(editing?.note || "")}" placeholder="Không bắt buộc"></div>
       <p class="form-hint">Tiền ứng chưa khấu trừ sẽ được đưa vào lần kết sổ tiếp theo.</p>`, standardActions(editing ? "Lưu thay đổi" : "Lưu khoản ứng"), async form => {
@@ -979,8 +1232,8 @@
     showModal("Kết sổ tính tiền", `
       <div class="form-field"><label for="settlement-mode">Phạm vi</label><select name="mode" id="settlement-mode"><option value="range">Theo khoảng ngày</option><option value="all">Toàn bộ chưa kết toán</option></select></div>
       <div id="settlement-dates" class="date-range">
-        <div class="form-field"><label for="settlement-from">Từ ngày</label><input type="date" name="from" id="settlement-from" value="${state.currentDate}" required></div>
-        <div class="form-field"><label for="settlement-to">Đến ngày</label><input type="date" name="to" id="settlement-to" value="${state.currentDate}" required></div>
+        <div class="form-field"><label for="settlement-from">Từ ngày</label>${UI.dateField({ id: "settlement-from", name: "from", value: state.currentDate, label: "Kết sổ từ ngày", required: true })}</div>
+        <div class="form-field"><label for="settlement-to">Đến ngày</label>${UI.dateField({ id: "settlement-to", name: "to", value: state.currentDate, label: "Kết sổ đến ngày", required: true })}</div>
       </div>
       <div id="settlement-preview" aria-live="polite"><p class="form-hint">Chỉ tính số kg chưa kết sổ. Chọn cùng ngày bắt đầu và kết thúc để tính một ngày.</p></div>`, standardActions("Tính tiền"), async form => {
       const selection = { mode: String(form.get("mode")), from: String(form.get("from") || ""), to: String(form.get("to") || "") };
@@ -1112,7 +1365,7 @@
         document.body.dataset.theme = state.settings.theme;
         await saveSettings();
         showToast("Đã lưu giao diện.");
-        if (state.screen === "home") renderHome(); else renderBook();
+        await updateVisibleData();
       });
     $("[data-cancel]").addEventListener("click", closeModal);
     $("#manage-rates").addEventListener("click", run(() => openRates()));
